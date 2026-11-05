@@ -224,6 +224,97 @@ quiet spot.
 Answers: how many full-length chunks one Enter can send in say and emote, and whether
 the server slows them down.
 
+## 9. How fast the chat limit recovers
+
+In check 8, 15 of 20 say messages from one key press arrived. The server refused the
+other five: "The number of messages that can be sent is limited, please wait to send
+another message." This check measures that limit:
+
+- how many messages it allows after a rest, and how fast it recovers;
+- whether refused messages count against you;
+- which chat types share it, and whether it counts messages or bytes.
+
+Unbound needs these numbers to cap how many chunks one Enter sends, and to tell you how
+long to wait for the rest. The check posts a lot of filler text in say and emote, so
+pick a quiet spot and stay out of a group. If the server says you're silenced or
+disconnects you, stop there.
+
+**Rest** means sending no chat at all, typed or from code, for 3 minutes; after a burst,
+the clock below shows it as `ub +180 s`. `/run`, `/dump` and other slash commands don't
+count: they never reach the server. If step 4 shows the limit takes longer than 3
+minutes to recover, rest that long instead.
+
+1. `/dump ERR_CHAT_THROTTLED`. Does it print the limit message? `nil` means Forever
+   names it differently.
+2. `/reload` (it stops the watcher from check 8), then paste these five lines, in order.
+   They're separate from Unbound. Paste them once per session, and again after any
+   `/reload`; pasted twice in one session, the watcher counts everything twice.
+
+   A watcher that counts your test messages as they come back, and the limit messages:
+
+   ```
+   /run local u={p=0,d=0}UBT=u u.w=NameUtil.GetUnmodifiedUnitFullName"player"u.f=CreateFrame"Frame"u.f:SetScript("OnEvent",function(_,e,m)if m:find"^ub%d+/"then u.p=u.p+1 elseif m:find"is limited"then u.d=u.d+1 u.e=e end end)
+   ```
+
+   The chat events it listens to, and the test message (numbered, then filler):
+
+   ```
+   /run local u=UBT for e in("SAY EMOTE WHISPER_INFORM SYSTEM"):gmatch"%S+"do u.f:RegisterEvent("CHAT_MSG_"..e)end u.m=function(i,n,L)return(("ub%d/%d"):format(i,n)..(" lorem ipsum dolor"):rep(15*L)):sub(1,255)end
+   ```
+
+   The sender:
+
+   ```
+   /run local u=UBT u.go=function(n,L,a,b)local t=GetTime()u.g=u.t and floor(t-u.t+.5).." s"or"-"u.t,u.p,u.d,u.e=t,0,0 for i=1,n do local c=b and i>n/2 and b or a C_ChatInfo.SendChatMessage(u.m(i,n,L),c,nil,c=="WHISPER"and u.w or nil)end u.r(n,a,b,t)end
+   ```
+
+   The summary, and a clock that counts from the last burst:
+
+   ```
+   /run local u=UBT u.r=function(n,a,b,t)C_Timer.After(3,function()print(("ub %d %s%s: %d ok, %d limited, gap %s %s"):format(n,a,b and"+"..b or"",u.p,u.d,u.g,u.e or""))end)u.k(t)end
+   ```
+
+   ```
+   /run local u=UBT u.k=function(t)for _,s in ipairs{5,10,20,30,60,90,120,180}do C_Timer.After(s,function()if u.t==t then print("ub +"..s.." s")end end)end end
+   ```
+
+   From then on, `/run UBT.go(20,1,"SAY")` sends 20 numbered messages (`ub1/20`,
+   `ub2/20`, …) on one key press. The second number sets the length: `1` for 255 bytes,
+   `0` for the number alone. A second chat type splits the burst in half:
+   `/run UBT.go(20,1,"SAY","EMOTE")` sends 10 says, then 10 emotes. Whispers go to
+   yourself.
+
+   Three seconds after each burst a summary appears, for example
+   `ub 20 SAY: 15 ok, 5 limited, gap 12 s CHAT_MSG_SYSTEM`:
+   - **ok**: messages that came back;
+   - **limited**: limit messages (if ok and limited don't add up to the number sent, some
+     refusals came without one);
+   - **gap**: time since the previous burst (`-` for the first);
+   - the last word: the event that carried the limit message.
+
+   Then the clock prints `ub +5 s`, `ub +10 s`, … up to `ub +180 s`. A new burst restarts
+   it. Screenshots of the summary lines are all this check needs.
+
+3. After a rest: `/run UBT.go(20,1,"SAY")`. Is it 15 ok again? If all 20 arrived, rest
+   and send 30 instead.
+4. Recovery. Don't rest after 3. When the clock shows `ub +10 s`, send
+   `/run UBT.go(20,1,"SAY")` again. Send the same line at the next `ub +30 s`, then
+   `ub +60 s`, then `ub +120 s`. If the last one still got fewer through than step 3,
+   send it once more at `ub +180 s`.
+5. Do refused messages count? Rest, then send exactly as many as got through in step 3,
+   for example `/run UBT.go(15,1,"SAY")`. All should arrive, none limited. At
+   `ub +10 s`, send `/run UBT.go(20,1,"SAY")`. Step 4's first burst had the same gap
+   but came after refused messages. Compare the two.
+6. Say and emote together. Rest, then `/run UBT.go(20,1,"SAY","EMOTE")`. 15 ok in total
+   means they share one limit; 20 means each has its own.
+7. Short messages. Rest, then `/run UBT.go(20,0,"SAY")`. 15 ok means the limit counts
+   messages, whatever their length. If all 20 arrived, rest and send 40.
+8. Optional, whispers. Rest, then `/run UBT.go(20,1,"SAY","WHISPER")`: 10 says, then 10
+   whispers to yourself. 15 ok in total means whispers share the limit with say.
+
+Answers: how many messages Unbound may send at once, how long the rest has to wait, and
+whether Unbound can work out that wait from the messages it sees.
+
 ## Afterwards
 
 - `/console taintLog 0`, then `/reload`.

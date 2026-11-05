@@ -9,17 +9,16 @@
 ## Checked in game
 
 First round: 2026-11-05 (launch day), client `1.60.1.70790`, open world only, with
-BugGrabber, BugSack and Total RP 3 loaded. Second and third rounds: later the same
+BugGrabber, BugSack and Total RP 3 loaded. Second to fourth rounds: later the same
 day, same setup (build not re-checked). Results are filed under their topics below.
 
 Still open:
 
 - Dungeon (out of combat) and boss fight: client-checks 3.7, 4.3, 5.4 and 6. They need a
   levelled character. Until then Unbound stays off in instances (project rule).
-- The chat throttle: how long it takes to recover, and whether it counts sends from
-  earlier key presses (see Throttling).
-- No check yet: how the server counts hyperlink markup, and safe spacing between
-  automatic sends.
+- No check yet: how the say/emote limit refills within its first 11 s, whether whispers
+  and party chat have limits of their own, how the server counts hyperlink markup, and
+  safe spacing between automatic sends.
 
 ## The client
 
@@ -73,6 +72,14 @@ Still open:
 - API: **`C_ChatInfo.SendChatMessage(message, chatType, languageID, target)`**.
   - `chatType` defaults to `"SAY"`. `target` is used by `"WHISPER"` (player name) and
     `"CHANNEL"` (channel number).
+  - `languageID`: Blizzard's chat box passes `editBox.languageID`, the language picked
+    in the chat menu (`SendText`). The menu fills it with `GetDefaultLanguage()` when
+    it's empty. In the first round, a typed `/s` and three `/run` sends with no
+    `languageID` all showed as `says: [Darnassian]`. A say gets that tag whenever its
+    language isn't `GetAlternativeDefaultLanguage()` (`ChatFrameOverrides.lua`), so the
+    tag doesn't show what a send with no `languageID` falls back to. Unbound's chunks
+    must pass the chat box's `languageID`, so they all go out in the language the
+    player picked.
   - Blizzard docs flag it `HasRestrictions`, `RestrictedForMacroChatMessages`,
     `SecretArguments = AllowedWhenUntainted`.
   - `RestrictedForMacroChatMessages` applies only during an active encounter. Macros
@@ -99,7 +106,7 @@ Still open:
   - **Several messages from one key press work** for `SAY` and `EMOTE`: three from one
     `/run` arrived, in order (**confirmed**). So did 6 and 10 full-length (255-byte)
     chunks, in both types (**confirmed**, client-checks 8). Every echo in a burst had the
-    same `GetTime()`. More than ~15 hits the throttle (see Throttling). Emote Splitter
+    same `GetTime()`. More than 15 hits the throttle (see Throttling). Emote Splitter
     (see Prior art) still sends one chunk at a time and waits for each server echo (see
     below). The echo arrives outside the key press, so with that pattern these types
     need one key press per chunk.
@@ -166,18 +173,27 @@ Still open:
   - In a party you lead, the echo is `CHAT_MSG_PARTY_LEADER`, not `CHAT_MSG_PARTY`.
   - During chat lockdown those echoes are secret values (**verify** how that affects
     matching).
-- **Throttling**: **confirmed** outdoors (client-checks 8.5). One key press sent 20
-  full-length `SAY` chunks. The first 15 arrived. For the rest the client printed a
-  yellow system line, repeated: "The number of messages that can be sent is limited,
-  please wait to send another message." Those messages were dropped, not queued or
-  delayed, and Lua saw no error (BugGrabber stayed empty).
-  - The text matches `ERR_CHAT_THROTTLED` in an older Retail GlobalStrings dump.
-    **Verify** the name on Forever (`/dump ERR_CHAT_THROTTLED`), and which event
-    delivers it if code ever needs to notice a drop.
-  - Still unknown: how long the limit takes to recover, and whether it counts earlier
-    sends. The 20-chunk run came within a few minutes of the 6- and 10-chunk runs, so 15
-    may be a rolling-window count rather than a per-burst cap. Keep bursts well under 15.
-  - Disconnects on floods are reported for Retail; not seen on Forever.
+- **Throttling**: **confirmed** outdoors (client-checks 8.5 and 9). `SAY` and `EMOTE`
+  share one limit of **15 messages**, counted in messages, not bytes. Of 20 sent on one
+  key press, the first 15 arrived every time: full-length or short, all in say or 10
+  says then 10 emotes. For each of the rest the client printed a yellow system line:
+  "The number of messages that can be sent is limited, please wait to send another
+  message." Those messages were dropped, not queued or delayed, and Lua saw no error
+  (BugGrabber stayed empty).
+  - That line is `ERR_CHAT_THROTTLED` (**confirmed** on Forever, same text), delivered
+    as `CHAT_MSG_SYSTEM`, one per refused message. Arrived and refused always added up
+    to the number sent, and the refused ones were always the last of the burst, so code
+    can tell which chunks were lost.
+  - The limit comes back fast. Bursts of 20 sent 11, 12, 31, 61 and 122 s after the
+    previous one got 15 through, the same as after a 3-minute rest. Refusals left no
+    penalty: 11 s after a clean burst of 15 and 12 s after a burst with 5 refused, the
+    next burst got 15 through both times. Not measured: how it refills within those
+    first 11 s (all at once, or a few messages a second).
+  - Whispers don't count toward it: 10 says and 10 whispers to yourself from one key
+    press all arrived. Untested: whether whispers have a limit of their own, and party
+    chat.
+  - Disconnects on floods are reported for Retail; none on Forever (check 9 sent 235
+    messages in under half an hour).
 
 ## Chat messaging lockdown
 

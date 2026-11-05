@@ -85,9 +85,13 @@ docs/                       -- design notes and API reference (never shipped)
 - 255 **bytes** per message, counted in bytes (confirmed in game; one byte more raises a
   Lua error and nothing is sent). Never split inside a UTF-8 sequence, a hyperlink or a
   colour escape.
-- The server throttles bursts: of 20 sends from one key press, only the first 15 arrived
-  (confirmed in game). The rest were dropped with no Lua error, only a system line
-  (`ERR_CHAT_THROTTLED`). Keep any burst well under 15 sends.
+- Say and emote share a server limit of 15 messages, counted in messages, not bytes, and
+  back in full within about 11 s (confirmed in game). Refused sends are dropped with no
+  Lua error, only one `ERR_CHAT_THROTTLED` system line each (`CHAT_MSG_SYSTEM`).
+  Whispers don't count toward it. A burst must fit in what's left of the 15 after the
+  say and emote messages of the last 12 s, typed ones included.
+- Send every chunk with the chat box's `languageID`, as Blizzard's `SendText` does, so
+  all chunks go out in the language the player picked.
 - Respect chat lockdown: check `C_ChatInfo.InChatMessagingLockdown()` and treat
   `CHAT_MSG_*` payloads as possibly secret (`issecretvalue`).
 - Wrap `RegisterEvent` in `pcall` for events that may not exist on Forever (an unknown
