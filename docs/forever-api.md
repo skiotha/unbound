@@ -9,15 +9,17 @@
 ## Checked in game
 
 First round: 2026-11-05 (launch day), client `1.60.1.70790`, open world only, with
-BugGrabber, BugSack and Total RP 3 loaded. Second round: later the same day, same
-setup (build not re-checked). Results are filed under their topics below.
+BugGrabber, BugSack and Total RP 3 loaded. Second and third rounds: later the same
+day, same setup (build not re-checked). Results are filed under their topics below.
 
 Still open:
 
 - Dungeon (out of combat) and boss fight: client-checks 3.7, 4.3, 5.4 and 6. They need a
   levelled character. Until then Unbound stays off in instances (project rule).
-- No check yet: how the server counts hyperlink markup, safe spacing between automatic
-  sends, and many full-length chunks from one key press.
+- The chat throttle: how long it takes to recover, and whether it counts sends from
+  earlier key presses (see Throttling).
+- No check yet: how the server counts hyperlink markup, and safe spacing between
+  automatic sends.
 
 ## The client
 
@@ -48,6 +50,12 @@ Still open:
 - **Game type `camelot`**: Blizzard's TOCs load Forever's own files with
   `[AllowLoadGameType camelot]`. In the UI source, a `Camelot\` file replaces its
   `Mainline\` or shared namesake.
+- **Addon icon**: the AddOns list draws the TOC's `IconTexture` (or `IconAtlas`) as a
+  20×20 inline texture (`Blizzard_AddOnList/AddonList.lua`). Texture sizes must be
+  powers of two. PNG works if the path includes `.png`. **Confirmed**: Unbound's
+  `Media\Icon.png` shows in the list. The minimap addon compartment
+  (`AddonCompartmentFunc`) loads only for game type `mainline` (`Blizzard_Minimap.toc`),
+  so Forever has none (from the source, not checked in game).
 - **Two-part names**: Forever characters are named `First Surname`. `UnitName(unit)` and
   `UnitNameUnmodified(unit)` return the first name and the surname, not name and realm.
   - `NameUtil.GetUnmodifiedUnitFullName(unit)` joins them with Blizzard's separator
@@ -89,10 +97,12 @@ Still open:
     `/run` on a key press it arrives (**confirmed**; the first round's empty result
     didn't repeat after a `/reload`). Inside instances: **verify**.
   - **Several messages from one key press work** for `SAY` and `EMOTE`: three from one
-    `/run` arrived, in order (**confirmed**). Emote Splitter (see Prior art) still sends
-    one chunk at a time and waits for each server echo (see below). The echo arrives
-    outside the key press, so with that pattern these types need one key press per
-    chunk.
+    `/run` arrived, in order (**confirmed**). So did 6 and 10 full-length (255-byte)
+    chunks, in both types (**confirmed**, client-checks 8). Every echo in a burst had the
+    same `GetTime()`. More than ~15 hits the throttle (see Throttling). Emote Splitter
+    (see Prior art) still sends one chunk at a time and waits for each server echo (see
+    below). The echo arrives outside the key press, so with that pattern these types
+    need one key press per chunk.
 
 - **Message length.** Blizzard's chat box (`Blizzard_ChatFrameBase/Mainline/ChatFrameEditBox.xml`
   on Forever) allows `visibleBytes="255"` of visible text plus `invisibleBytes="1023"`
@@ -146,16 +156,28 @@ Still open:
   without a reload, went out too. As with the hook, outdoors can't show whether those
   sends were tainted.
 - **Ordering and the server throttle**: sending `SAY`/`EMOTE`/`YELL` too fast gets
-  messages dropped or reordered. The robust pattern is to send one chunk, wait for its
-  own echo (`CHAT_MSG_SAY`, `CHAT_MSG_EMOTE`, …), then send the next.
+  messages dropped or reordered (Retail reports; Forever: see Throttling). The robust
+  pattern is to send one chunk, wait for its own echo (`CHAT_MSG_SAY`,
+  `CHAT_MSG_EMOTE`, …), then send the next. Bursts of up to 15 arrived in order on
+  Forever (**confirmed**), so the echo wait isn't needed for ordering at that size.
   - **Confirmed** outdoors, in and out of combat: your own messages echo as
     `CHAT_MSG_SAY`, `CHAT_MSG_EMOTE` and `CHAT_MSG_WHISPER_INFORM`, with readable (not
     secret) text.
   - In a party you lead, the echo is `CHAT_MSG_PARTY_LEADER`, not `CHAT_MSG_PARTY`.
   - During chat lockdown those echoes are secret values (**verify** how that affects
     matching).
-- **Throttling**: the server drops or disconnects on message floods. Space out
-  automatic sends (**verify** safe intervals on Forever).
+- **Throttling**: **confirmed** outdoors (client-checks 8.5). One key press sent 20
+  full-length `SAY` chunks. The first 15 arrived. For the rest the client printed a
+  yellow system line, repeated: "The number of messages that can be sent is limited,
+  please wait to send another message." Those messages were dropped, not queued or
+  delayed, and Lua saw no error (BugGrabber stayed empty).
+  - The text matches `ERR_CHAT_THROTTLED` in an older Retail GlobalStrings dump.
+    **Verify** the name on Forever (`/dump ERR_CHAT_THROTTLED`), and which event
+    delivers it if code ever needs to notice a drop.
+  - Still unknown: how long the limit takes to recover, and whether it counts earlier
+    sends. The 20-chunk run came within a few minutes of the 6- and 10-chunk runs, so 15
+    may be a rolling-window count rather than a per-burst cap. Keep bursts well under 15.
+  - Disconnects on floods are reported for Retail; not seen on Forever.
 
 ## Chat messaging lockdown
 

@@ -42,6 +42,8 @@
 ```
 Unbound/                    -- the addon folder (ships to Interface/AddOns/Unbound/)
 ├── Unbound.toc             -- manifest: load order, SavedVariables, version
+├── Media/
+│   └── Icon.png            -- AddOns-list icon (TOC IconTexture), 64×64 PNG
 ├── Util/                   -- pure-Lua helpers, no WoW API (unit-tested)
 │   └── Defaults.lua        -- ns.ApplyDefaults: deep-fill missing SV keys
 └── Unbound.lua             -- entry: events, SavedVariables init, slash commands
@@ -83,6 +85,9 @@ docs/                       -- design notes and API reference (never shipped)
 - 255 **bytes** per message, counted in bytes (confirmed in game; one byte more raises a
   Lua error and nothing is sent). Never split inside a UTF-8 sequence, a hyperlink or a
   colour escape.
+- The server throttles bursts: of 20 sends from one key press, only the first 15 arrived
+  (confirmed in game). The rest were dropped with no Lua error, only a system line
+  (`ERR_CHAT_THROTTLED`). Keep any burst well under 15 sends.
 - Respect chat lockdown: check `C_ChatInfo.InChatMessagingLockdown()` and treat
   `CHAT_MSG_*` payloads as possibly secret (`issecretvalue`).
 - Wrap `RegisterEvent` in `pcall` for events that may not exist on Forever (an unknown

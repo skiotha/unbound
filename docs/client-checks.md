@@ -193,6 +193,37 @@ box after each send. This checks whether that works and whether it harms later s
 Answers: whether Unbound can hand you the next chunk in the chat box, and for which chat
 types.
 
+## 8. Many full-length chunks from one key press
+
+Unbound's plan is to send every chunk of a message on the same Enter. This checks
+whether the server takes several 255-byte messages in a row without dropping or
+reordering them. Party and whisper can also be sent from a timer, so Unbound can space
+those out; this check is about say and emote. It posts long filler text, so pick a
+quiet spot.
+
+1. `/reload`, then start the watcher, once. For each of your own test messages it prints
+   the chat type, the chunk number, its length in bytes and the time it came back:
+
+   ```
+   /run local f=CreateFrame"Frame"f:RegisterEvent"CHAT_MSG_SAY"f:RegisterEvent"CHAT_MSG_EMOTE"f:SetScript("OnEvent",function(_,e,t)local i=t:match"^ub(%d+)/"if i then print(e:sub(10),i,#t,GetTime())end end)
+   ```
+
+2. Six chunks in Say, each 255 bytes and numbered (`ub1/6`, `ub2/6`, …):
+
+   ```
+   /run local n,c=6,"SAY"for i=1,n do C_ChatInfo.SendChatMessage(("ub"..i.."/"..n.." "..("lorem ipsum dolor "):rep(15)):sub(1,255),c)end
+   ```
+
+   Do all six appear in chat, in order? Does the watcher print 1 to 6, each `255`? Note
+   any system message or red error text, and how far apart the times are.
+3. Wait about a minute, then the same line with `n,c=10,"SAY"`.
+4. Wait again, then repeat 2–3 with `"EMOTE"` in place of `"SAY"`.
+5. Optional, only if both runs of 10 arrived complete: wait, then `n,c=15,"SAY"`, to see
+   where the limit is. Stop at the first run that loses or reorders a message.
+
+Answers: how many full-length chunks one Enter can send in say and emote, and whether
+the server slows them down.
+
 ## Afterwards
 
 - `/console taintLog 0`, then `/reload`.
