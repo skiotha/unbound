@@ -1,0 +1,10 @@
+## Interface: 16001
+## Title: Unbound
+## Notes: Splits long chat messages into chunks and sends them one by one.
+## Author: Ahani
+## Version: 0.1.0
+## Category: Chat
+## SavedVariables: UnboundDB
+
+Util\Defaults.lua
+Unbound.lua

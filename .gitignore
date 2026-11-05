@@ -1,0 +1,6 @@
+# Scratch / sample data
+temp/
+
+# Release builds
+dist/
+*.zip

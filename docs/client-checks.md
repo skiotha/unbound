@@ -1,0 +1,141 @@
+# In-game checks
+
+> Manual checks for the Forever client. They confirm the facts marked **verify** in
+> [forever-api.md](forever-api.md) and test what Unbound will rely on. Run them once the
+> client is playable, and again after a Forever patch. Results go into forever-api.md;
+> this file only holds the steps.
+
+## Before you start
+
+- Type or paste each line into the chat box and press Enter. Every line fits the
+  255-byte chat limit.
+- If the client asks whether to allow scripts, allow it.
+- Show Lua errors on screen: `/console scriptErrors 1`.
+- Log taint to `_forever_\Logs\taint.log`: `/console taintLog 1`. If
+  `/dump GetCVar("taintLog")` prints `nil`, the setting no longer exists; skip it.
+- Optional: BugGrabber + BugSack. They keep every error in their SavedVariables, which
+  can be read from disk after you log out.
+- Screenshots (Print Screen) land in `_forever_\Screenshots\`. That's the easiest way
+  to hand over `/dump` output.
+- Some checks post to `/say`, `/emote` or `/party`; use a quiet spot. Whispers go to
+  yourself.
+
+## 1. Client and loading
+
+1. `/dump GetBuildInfo()`: version `1.60.x`. The 4th value is the interface number,
+   expected `16001`.
+2. `/dump _VERSION`: `"Lua 5.1"`.
+3. `/ub`: Unbound prints its help. The AddOns list doesn't mark it out of date.
+4. SavedVariables survive a reload and a restart:
+   - `/run UnboundDB.probe=date("%H:%M:%S")`, `/reload`, then `/dump UnboundDB.probe`
+     shows the same time.
+   - Quit the game, start it again: `/dump UnboundDB.probe` still shows that time.
+   - Clean up: `/run UnboundDB.probe=nil`.
+
+## 2. Chat box limits
+
+1. Current limits. Blizzard's XML says 1280 bytes in total, 255 of them visible:
+
+   ```
+   /dump ChatFrame1EditBox:GetMaxBytes(),ChatFrame1EditBox:GetMaxLetters(),ChatFrame1EditBox:GetVisibleTextByteLimit()
+   ```
+
+2. Lift the limits, then paste about 600 characters into the chat box. Does it take all
+   of them? **Press Escape; don't send.** `/reload` restores the limits.
+
+   ```
+   /run local e=ChatFrame1EditBox e:SetMaxBytes(0)e:SetMaxLetters(0)e:SetVisibleTextByteLimit(0)
+   ```
+
+## 3. Sending from code, without a key press
+
+Each line sends one second later from a timer, so no key press is involved.
+
+1. Whisper to yourself. Does it arrive?
+
+   ```
+   /run C_Timer.After(1,function()C_ChatInfo.SendChatMessage("ub timer","WHISPER",nil,UnitName("player"))end)
+   ```
+
+2. Emote. Does it arrive?
+
+   ```
+   /run C_Timer.After(1,function()C_ChatInfo.SendChatMessage("ub timer","EMOTE")end)
+   ```
+
+3. Say, outdoors. Expected to be blocked. Note what happens: nothing, an error, or a
+   message in chat.
+
+   ```
+   /run C_Timer.After(1,function()C_ChatInfo.SendChatMessage("ub timer","SAY")end)
+   ```
+
+4. Party, in a group. Does it arrive?
+
+   ```
+   /run C_Timer.After(1,function()C_ChatInfo.SendChatMessage("ub timer","PARTY")end)
+   ```
+
+5. Several messages from one key press, outdoors. Do all three arrive, in order? Repeat
+   with `"EMOTE"` in place of `"SAY"`.
+
+   ```
+   /run for i=1,3 do C_ChatInfo.SendChatMessage("ub multi "..i,"SAY")end
+   ```
+
+6. Repeat 1–4 inside a dungeon, out of combat.
+
+Answers: which chat types Unbound can send automatically, and whether one key press can
+send several chunks.
+
+## 4. Echo of your own messages
+
+1. Start a watcher; it runs until `/reload`. It prints the event and the text, or
+   `SECRET` when the text is hidden from addons:
+
+   ```
+   /run local f=CreateFrame"Frame"for _,e in ipairs{"SAY","EMOTE","PARTY","PARTY_LEADER","WHISPER_INFORM"}do f:RegisterEvent("CHAT_MSG_"..e)end f:SetScript("OnEvent",function(_,e,t)print(e,issecretvalue(t)and"SECRET"or t)end)
+   ```
+
+2. Send a `/s`, `/e`, `/p` and a whisper to yourself by hand. Expect one printed line
+   per message, showing your text.
+3. Repeat in a dungeon out of combat and, if convenient, during a boss fight.
+
+Answers: whether Unbound can see that a chunk arrived before sending the next one, and
+where secret values start.
+
+## 5. Blizzard's pre-send hook
+
+Blizzard's chat box fires `ChatFrame.OnEditBoxPreSendText` just before it sends, so
+addons can edit the text. This test adds ` [ub]` to every message you type.
+
+1. Register the test:
+
+   ```
+   /run EventRegistry:RegisterCallback("ChatFrame.OnEditBoxPreSendText",function(_,e)local t=e:GetText()if t:find("%S")then e:SetText(t.." [ub]")end end,"UBTEST")
+   ```
+
+2. Whisper yourself `hello`: it arrives as `hello [ub]`.
+3. `/e`, `/s` outdoors, `/p` in a group: each gets ` [ub]`, with no error and no
+   "Interface action failed" message.
+4. Repeat 2–3 in a dungeon out of combat and, if convenient, during a boss fight.
+5. Remove the test (or `/reload`):
+
+   ```
+   /run EventRegistry:UnregisterCallback("ChatFrame.OnEditBoxPreSendText","UBTEST")
+   ```
+
+Answers: whether Unbound can work inside Blizzard's own chat box without the taint that
+broke UnlimitedChatMessage (see forever-api.md → Prior art).
+
+## 6. Chat lockdown
+
+1. `/dump IsInInstance(),C_ChatInfo.InChatMessagingLockdown()` in the open world, in a
+   dungeon out of combat and during a boss fight.
+
+Answers: where Unbound has to step aside.
+
+## Afterwards
+
+- `/console taintLog 0`, then `/reload`.
+- Note the client build from `/dump GetBuildInfo()` next to the results.

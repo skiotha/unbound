@@ -1,0 +1,9 @@
+# Normalize to LF everywhere (the WoW client reads LF .lua/.toc files fine).
+* text=auto eol=lf
+
+*.png binary
+*.tga binary
+*.blp binary
+*.ogg binary
+*.mp3 binary
+*.zip binary
