@@ -1,5 +1,6 @@
 ## Interface: 16001
 ## Title: Unbound
+## IconTexture: Interface\Addons\Unbound\Media\Icon.png
 ## Notes: Splits long chat messages into chunks and sends them one by one.
 ## Author: Ahani
 ## Version: 0.1.0
