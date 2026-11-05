@@ -90,14 +90,32 @@ Cut a long text into chunks that each fit one message, without breaking anything
 change in game yet.
 
 - A pure-Lua module in `Util/`, written test-first.
-- Chunks of at most 255 bytes, cut at spaces where possible. Never inside a UTF-8
-  sequence, a hyperlink, a colour escape or another `|` escape.
+- Chunks of at most 255 bytes, cut at the last whitespace that fits. Split a word
+  only when it cannot fit on its own, at a UTF-8 boundary. No sentence preference.
+  Never cut inside a UTF-8 sequence, a hyperlink, a colour escape or another `|` escape.
 - Link markup counts in full until the server's counting is checked (conservative).
+- Preserve colour across chunk boundaries by closing and reopening the active colour
+  stack, including nested colours. Count all added markup in the 255-byte limit.
+- Trim leading/trailing whitespace, including at chunk boundaries, without rewriting
+  whitespace inside a chunk or the contents of links and escapes.
+- No continuation markers. Custom markers and their byte budgeting are a much later
+  discussion, not part of the initial splitter or settings stage.
+- Malformed input or an indivisible unit that exceeds the byte limit returns an
+  explicit failure, not truncated text or partial chunks. The caller keeps the
+  original post; there is no automatic fallback send.
 
-**Gate:** unit tests, plus we review where two or three of our real posts get cut.
+**Gate:** unit tests, plus we review where two or three lorem-ipsum posts get cut.
+Include UTF-8 punctuation and link cases, not just ASCII filler. Use lorem-ipsum
+posts for later client checks too, with actual client-inserted links where relevant.
 
-Open: preferred cut points (sentence end or any space)? Continuation markers (none,
-`…`, `(1/3)`)? Each emote chunk starts with the character's name: does that read well?
+The supported escape forms and failure contract are in
+[README → Splitter contract](../README.md#splitter-contract). Unknown forms fail
+explicitly rather than being split speculatively.
+
+> ✅ **Completed 2026-11-05.** Divergences from the text above: none.
+> The gate was unit tests and offline sample review, not an in-game send check.
+> Chat integration, outgoing hyperlink/colour acceptance and markup byte counting
+> belong to 0.3; no arbitrary outgoing colour support is assumed.
 
 ## 0.3 Say and emote, outdoors
 
@@ -116,7 +134,9 @@ option 1 from the checks; option 2 (one Enter per chunk) stays the fallback.
 **Gate** (new client-checks section, `taintLog` on, BugSack watched):
 
 - 2, 5 and cap-sized says and emotes arrive in order, in the right language;
-- a post with typographic characters and an item link;
+- review emote readability with the character's name repeated before each chunk;
+- a post with typographic characters and an actual item link; check hyperlink/colour
+  acceptance and markup byte counting, without assuming arbitrary colours can be sent;
 - an over-cap post: nothing sent, text kept;
 - a forced refusal (15 typed says first): reported, text kept;
 - slash commands, an empty box and `/reload` cause no errors.
@@ -205,7 +225,7 @@ chunks.
 Tune behaviour without editing code.
 
 - `/ub` options stored in `UnboundDB`. Candidates: the cap per Enter, what to do with
-  very long posts, continuation markers, the hint, chat types on or off.
+  very long posts, the hint, chat types on or off.
 - Maybe a `/ub status` line (budget left, time to recovery). Low priority while
   recovery is about 10 s.
 - An options panel only if slash options feel clumsy.
@@ -228,6 +248,18 @@ during and after a boss; BugSack stays empty.
 
 ## Later, if wanted
 
+- **After 1.0: deliberate newlines and paragraphs for RP.** Discuss multiline input
+  (for example Ctrl+Enter), pasted newlines, and how paragraph breaks map to chat
+  messages. No new input binding or paragraph behaviour in 0.2.
+- **Much later: custom continuation markers.** Discuss user-configured prefixes or
+  suffixes and update the splitter to include their bytes in every chunk's limit.
+- **Post-release: optional colour authoring.** If client checks establish that outgoing
+  colours work, discuss helping the player colour input text. The initial splitter
+  only preserves existing markup; it does not introduce a colour-input feature.
+- **Manual bypass after a splitter failure.** Consider a quick "use Blizzard chat
+  as-is" switch, since a rejection may expose a parser bug rather than bad user
+  input. Restore Blizzard's normal limits; bypass cannot make an oversized message
+  valid and must not automatically resend anything.
 - Other chat types: yell, raid, instance, guild, officer, channels, Battle.net
   whispers. Each needs its own limit and key-press check first.
 - Whatever daily use suggests.

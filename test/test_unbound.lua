@@ -6,7 +6,7 @@ describe("Unbound entry", function()
     end)
 
     it("reads its version from the TOC", function()
-        expect(ns.VERSION).toEqual("0.1.0")
+        expect(ns.VERSION).toEqual("0.2.0")
     end)
 
     describe("ADDON_LOADED", function()
@@ -34,7 +34,7 @@ describe("Unbound entry", function()
             WowStub.runSlash("/unbound")
             WowStub.runSlash("/UB help")
             expect(#WowStub.printed > 0).toBeTruthy()
-            expect(WowStub.printed[1]).toContain("v0.1.0")
+            expect(WowStub.printed[1]).toContain("v0.2.0")
             expect(table.concat(WowStub.printed, "\n")).toContain("/ub help")
         end)
 

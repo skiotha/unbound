@@ -126,6 +126,14 @@ Still open:
   markup is still **verify**. A chunk split must never:
   - cut a UTF-8 multi-byte sequence in half;
   - break a hyperlink (`|H…|h[…]|h`) or a colour escape (`|cAARRGGBB…|r`).
+
+  **Markup syntax reference, not an outgoing-chat confirmation:** modern WoW's
+  [UI escape sequences](https://warcraft.wiki.gg/wiki/UI_escape_sequences) include
+  hex and named colours (`|cnNAME:…|r`, including `|cnIQ4:…|r`). Since 9.0.1,
+  `|r` pops the innermost colour, restoring the outer one rather than always
+  resetting to the default. The splitter must close/reopen the whole active stack
+  when splitting coloured text. Forever's outgoing colour acceptance and hyperlink
+  byte counting still need client checks.
 - **Over the limit, nothing is sent.** `C_ChatInfo.SendChatMessage` raises a Lua error,
   `SendChatMessage(): Chat message limits exceeded`. **Confirmed** through Blizzard's
   chat box: 600 and 300 letters failed (BugGrabber: "No Lua Taint"), 200 went out.
