@@ -12,13 +12,16 @@
 - If the client asks whether to allow scripts, allow it.
 - Show Lua errors on screen: `/console scriptErrors 1`.
 - Log taint to `_forever_\Logs\taint.log`: `/console taintLog 1`. If
-  `/dump GetCVar("taintLog")` prints `nil`, the setting no longer exists; skip it.
+  `/dump GetCVar("taintLog")` prints `nil`, the setting no longer exists; skip it. It
+  isn't saved, so set it again after every restart.
 - Optional: BugGrabber + BugSack. They keep every error in their SavedVariables, which
-  can be read from disk after you log out.
+  can be read from disk after you log out. BugGrabber shows only the **first** blocked
+  action per session, so `/reload` before each check that might be blocked.
 - Screenshots (Print Screen) land in `_forever_\Screenshots\`. That's the easiest way
   to hand over `/dump` output.
 - Some checks post to `/say`, `/emote` or `/party`; use a quiet spot. Whispers go to
-  yourself.
+  yourself, by full name: Forever names have two parts, so type `/w First Surname`.
+  The `/run` lines use `NameUtil.GetUnmodifiedUnitFullName("player")`.
 
 ## 1. Client and loading
 
@@ -47,14 +50,32 @@
    /run local e=ChatFrame1EditBox e:SetMaxBytes(0)e:SetMaxLetters(0)e:SetVisibleTextByteLimit(0)
    ```
 
+3. Message limit: bytes or characters? Each line says one message straight from your
+   key press. Note what happens: the message in chat, or the error
+   `Chat message limits exceeded`.
+   - 255 × `x` (255 bytes), then the same with `256`:
+
+     ```
+     /run C_ChatInfo.SendChatMessage(("x"):rep(255),"SAY")
+     ```
+
+   - 85 em dashes (255 bytes), then the same with `86` (258 bytes, but only 86
+     characters). If 86 arrives, the limit counts characters, not bytes.
+
+     ```
+     /run C_ChatInfo.SendChatMessage(("\226\128\148"):rep(85),"SAY")
+     ```
+
 ## 3. Sending from code, without a key press
 
 Each line sends one second later from a timer, so no key press is involved.
 
-1. Whisper to yourself. Does it arrive?
+1. Whisper to yourself. First check your full name as the client builds it:
+   `/dump NameUtil.GetUnmodifiedUnitFullName("player")`. Note the character between the
+   two names. Then, does this arrive?
 
    ```
-   /run C_Timer.After(1,function()C_ChatInfo.SendChatMessage("ub timer","WHISPER",nil,UnitName("player"))end)
+   /run local t=NameUtil.GetUnmodifiedUnitFullName("player")C_Timer.After(1,function()C_ChatInfo.SendChatMessage("ub timer","WHISPER",nil,t)end)
    ```
 
 2. Emote. Does it arrive?
@@ -76,14 +97,20 @@ Each line sends one second later from a timer, so no key press is involved.
    /run C_Timer.After(1,function()C_ChatInfo.SendChatMessage("ub timer","PARTY")end)
    ```
 
-5. Several messages from one key press, outdoors. Do all three arrive, in order? Repeat
-   with `"EMOTE"` in place of `"SAY"`.
+5. One emote straight from your key press, no timer. `/reload` first. Does it arrive?
+
+   ```
+   /run C_ChatInfo.SendChatMessage("ub key","EMOTE")
+   ```
+
+6. Several messages from one key press, outdoors. Do all three arrive, in order? Then
+   `/reload` and repeat with `"EMOTE"` in place of `"SAY"`.
 
    ```
    /run for i=1,3 do C_ChatInfo.SendChatMessage("ub multi "..i,"SAY")end
    ```
 
-6. Repeat 1–4 inside a dungeon, out of combat.
+7. Repeat 1–4 inside a dungeon, out of combat.
 
 Answers: which chat types Unbound can send automatically, and whether one key press can
 send several chunks.
@@ -115,9 +142,10 @@ addons can edit the text. This test adds ` [ub]` to every message you type.
    /run EventRegistry:RegisterCallback("ChatFrame.OnEditBoxPreSendText",function(_,e)local t=e:GetText()if t:find("%S")then e:SetText(t.." [ub]")end end,"UBTEST")
    ```
 
-2. Whisper yourself `hello`: it arrives as `hello [ub]`.
+2. Whisper yourself: `/w First Surname hello`. It arrives as `hello [ub]`.
 3. `/e`, `/s` outdoors, `/p` in a group: each gets ` [ub]`, with no error and no
-   "Interface action failed" message.
+   "Interface action failed" message. `/reload` and register again before `/e`, so a
+   block would be recorded.
 4. Repeat 2–3 in a dungeon out of combat and, if convenient, during a boss fight.
 5. Remove the test (or `/reload`):
 
@@ -134,6 +162,36 @@ broke UnlimitedChatMessage (see forever-api.md → Prior art).
    dungeon out of combat and during a boss fight.
 
 Answers: where Unbound has to step aside.
+
+## 7. Reopening the chat box from code
+
+If each chunk needs its own Enter, Unbound would put the next chunk back into the chat
+box after each send. This checks whether that works and whether it harms later sends.
+`/reload` before each step.
+
+1. Say mode. Send any `/s` by hand first, so the box is in Say mode. Then:
+
+   ```
+   /run C_Timer.After(1,function()ChatFrameUtil.OpenChat("ub reopened")end)
+   ```
+
+   The box opens in Say mode with `ub reopened`. Press Enter: does it arrive, with no
+   error?
+2. Emote mode. The box doesn't stay in Emote mode after a send, so the text starts with
+   `/e`:
+
+   ```
+   /run C_Timer.After(1,function()ChatFrameUtil.OpenChat("/e ub reopened")end)
+   ```
+
+   Does the box switch to Emote with `ub reopened`? Press Enter: does it arrive, or is
+   it blocked?
+3. Right after 2, without a reload: type `/e ub after` and send it, then `/s ub after`.
+   Both should arrive with no error. A block here means reopening left taint in the chat
+   box.
+
+Answers: whether Unbound can hand you the next chunk in the chat box, and for which chat
+types.
 
 ## Afterwards
 

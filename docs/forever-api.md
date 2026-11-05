@@ -3,15 +3,29 @@
 > Reference for what is specific about the **World of Warcraft: Forever** client and
 > the chat API. Facts sources are at the bottom and relevant for September 2026.
 > Items marked **verify** have not yet been confirmed in our own client;
-> [client-checks.md](client-checks.md) has the steps.
+> [client-checks.md](client-checks.md) has the steps. Items marked **confirmed** were
+> tested in our client, at the build named in [Checked in game](#checked-in-game).
+
+## Checked in game
+
+First round: 2026-11-05 (launch day), client `1.60.1.70790`, open world only, with
+BugGrabber, BugSack and Total RP 3 loaded. Second round: later the same day, same
+setup (build not re-checked). Results are filed under their topics below.
+
+Still open:
+
+- Dungeon (out of combat) and boss fight: client-checks 3.7, 4.3, 5.4 and 6. They need a
+  levelled character. Until then Unbound stays off in instances (project rule).
+- No check yet: how the server counts hyperlink markup, safe spacing between automatic
+  sends, and many full-length chunks from one key press.
 
 ## The client
 
 - **Interface number: `16001`** (build line `1.60.x`). The number is
-  major·10000 + minor·100 + patch, so the installed client `1.60.1.70755`
-  (`Wow.exe` file version after the 2026-11-03 update) is still `16001`. A `1.60.2` client
-  would need `16002` in the TOC. Verify in game with `/dump select(4, GetBuildInfo())`.
-- **Lua**: a subset of Lua 5.1. `/dump _VERSION` prints `"Lua 5.1"`,
+  major·10000 + minor·100 + patch. A `1.60.2` client would need `16002` in the TOC.
+  **Confirmed**: on launch day `/dump GetBuildInfo()` printed `"1.60.1"`, `"70790"`,
+  `"Nov  3 2026"`, `16001`, and the AddOns list accepted the TOC.
+- **Lua**: a subset of Lua 5.1. `/dump _VERSION` prints `"Lua 5.1"` (**confirmed**),
   and the patch level isn't exposed. Our tests run on stock 5.1.5. WoW's
   _environment_ differs: no file access, a cut-down `os`, extra globals
   (`strsplit`, `strtrim`, `wipe`, …), taint and secret values. `test/wowstubs.lua`
@@ -28,8 +42,23 @@
 - **`ReloadUI()` is protected**, so addon "Reload" buttons don't work. Type `/reload`.
 - After **100 Lua errors** in one session the client stops reporting errors.
 - **SavedVariables**: early beta builds wrote SVs to disk but never loaded them back.
-  Reported fixed in builds after 2026-09-25. If settings reset on every launch, check
-  the client build before debugging the addon.
+  Reported fixed in builds after 2026-09-25. **Confirmed** fixed: `UnboundDB` kept a
+  value across `/reload` and a full restart. If settings ever reset on every launch,
+  check the client build before debugging the addon.
+- **Game type `camelot`**: Blizzard's TOCs load Forever's own files with
+  `[AllowLoadGameType camelot]`. In the UI source, a `Camelot\` file replaces its
+  `Mainline\` or shared namesake.
+- **Two-part names**: Forever characters are named `First Surname`. `UnitName(unit)` and
+  `UnitNameUnmodified(unit)` return the first name and the surname, not name and realm.
+  - `NameUtil.GetUnmodifiedUnitFullName(unit)` joins them with Blizzard's separator
+    (`Constants.CharacterNameSeparatorConsts.CHARACTERNAME_SURNAME_SEPARATOR`, set by
+    the client). **Confirmed**: the separator is a space (`First Surname`).
+  - Typed whispers accept both `First-Surname` and `First Surname` (`ExtractTellTarget`
+    in `ChatFrameEditBox.lua`).
+  - **Confirmed**: sending a `WHISPER` to `UnitName("player")` fails with "No player named
+    '<first name>' is currently playing." Sent to the full name, it arrives.
+  - Whisper chunks should reuse the target Blizzard's chat box already resolved
+    (`editBox:GetTellTarget()`) instead of building a name.
 
 ## Sending chat
 
@@ -42,44 +71,89 @@
     then can't send to channels that aren't group-only, and group or whisper sends are
     rate-limited and need everyone in the instance (Blizzard, March 2026).
 - **Hardware event requirement** (since 8.2.5). Each restricted call must run inside a
-  key press or mouse click handler, so a timer **cannot** send these:
+  key press or mouse click handler, so a timer **cannot** send these. The wiki's table is
+  for Retail; Forever is stricter about `EMOTE`:
 
-  | Chat type                                                                                | Needs a hardware event?           |
-  | ---------------------------------------------------------------------------------------- | --------------------------------- |
-  | `CHANNEL` (`/1`, `/2`, …)                                                                | Always, outdoors and in instances |
-  | `SAY`, `YELL`                                                                            | Outside instances                 |
-  | `EMOTE`, `PARTY`, `RAID`, `RAID_WARNING`, `INSTANCE_CHAT`, `GUILD`, `OFFICER`, `WHISPER` | No (**verify** on Forever)        |
+  | Chat type                                                           | Needs a hardware event?                                                                     |
+  | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+  | `CHANNEL` (`/1`, `/2`, …)                                           | Always, outdoors and in instances                                                           |
+  | `SAY`, `YELL`                                                       | Outside instances. **Confirmed** for `SAY`: nothing arrived from a timer                    |
+  | `EMOTE`                                                             | Outside instances (Retail: no). **Confirmed**: timer blocked, key press sends               |
+  | `PARTY`                                                             | No. **Confirmed**: a timer send arrived                                                     |
+  | `WHISPER`                                                           | No. **Confirmed**: a timer whisper to the full name arrived                                 |
+  | `RAID`, `RAID_WARNING`, `INSTANCE_CHAT`, `GUILD`, `OFFICER`         | No (Retail wiki; not tested)                                                                |
 
-  Whether one key press may send _several_ messages is unconfirmed. Emote Splitter
-  (see Prior art) tries, and falls back to a prompt if Blizzard blocks it. In practice,
-  chunks are sent one at a time and each waits for the server echo (see below). The echo
-  arrives outside the key press, so these types end up needing one key press per chunk.
+  - **`EMOTE` on Forever** behaves like `SAY` outdoors. From a timer:
+    `[ADDON_ACTION_BLOCKED] AddOn '*** ForceTaint_Strong ***' tried to call the protected
+    function 'UNKNOWN()'` (`ForceTaint_Strong` is how `/run` code shows up). From a
+    `/run` on a key press it arrives (**confirmed**; the first round's empty result
+    didn't repeat after a `/reload`). Inside instances: **verify**.
+  - **Several messages from one key press work** for `SAY` and `EMOTE`: three from one
+    `/run` arrived, in order (**confirmed**). Emote Splitter (see Prior art) still sends
+    one chunk at a time and waits for each server echo (see below). The echo arrives
+    outside the key press, so with that pattern these types need one key press per
+    chunk.
 
 - **Message length.** Blizzard's chat box (`Blizzard_ChatFrameBase/Mainline/ChatFrameEditBox.xml`
   on Forever) allows `visibleBytes="255"` of visible text plus `invisibleBytes="1023"`
-  of hidden markup (hyperlink codes). That's bytes, not characters. Plain English is
-  1 byte per character, but typographic characters such as `’ “ ” — …` are 3 bytes each
-  in UTF-8, and letters of other languages take 2–3. Emote Splitter treats
-  255 bytes as the per-message limit. How the server counts link markup is still
-  **verify**. A chunk split must never:
+  of hidden markup (hyperlink codes). That's bytes, not characters (**confirmed**, see
+  below). Plain English is 1 byte per character, but typographic characters such as
+  `’ “ ” — …` are 3 bytes each in UTF-8, and letters of other languages take 2–3. Emote
+  Splitter also treats 255 bytes as the per-message limit. How the server counts link
+  markup is still **verify**. A chunk split must never:
   - cut a UTF-8 multi-byte sequence in half;
   - break a hyperlink (`|H…|h[…]|h`) or a colour escape (`|cAARRGGBB…|r`).
-- **Typing past the limit**: the chat box itself refuses longer input. An addon has to
-  lift that with `SetMaxLetters(0)`, `SetMaxBytes(0)` and `SetVisibleTextByteLimit(0)`.
-  All three exist on Forever (`SimpleEditBoxAPIDocumentation.lua`).
+- **Over the limit, nothing is sent.** `C_ChatInfo.SendChatMessage` raises a Lua error,
+  `SendChatMessage(): Chat message limits exceeded`. **Confirmed** through Blizzard's
+  chat box: 600 and 300 letters failed (BugGrabber: "No Lua Taint"), 200 went out.
+  **Confirmed** boundary: 255 bytes, counted in bytes. From `/run`, 255 × `x` and 85 em
+  dashes (255 bytes) went out; 256 × `x` and 86 em dashes (258 bytes, 86 characters)
+  raised the error.
+- **Typing past the limit**: the chat box itself refuses longer input. Defaults on
+  Forever: `GetMaxBytes()` 1280, `GetMaxLetters()` 0 (no limit),
+  `GetVisibleTextByteLimit()` 255 (**confirmed**). An addon has to lift that with
+  `SetMaxLetters(0)`, `SetMaxBytes(0)` and `SetVisibleTextByteLimit(0)`
+  (`SimpleEditBoxAPIDocumentation.lua`). **Confirmed**: after that, the box took a
+  600-letter paste. Pressing Enter on it hits the error above, so whatever lifts the
+  limits must also shorten the text before Blizzard sends it.
 - **Pre-send hook**: Blizzard's chat box triggers the `EventRegistry` event
   `"ChatFrame.OnEditBoxPreSendText"` (payload: the edit box) inside `SendText`. It
   runs after slash-command parsing and before the text is read
   (`Blizzard_ChatFrameBase/Shared/ChatFrameEditBox.lua`). Blizzard's comment:
   "Notification for user addons to perform any final edits to chat text contents before
   sending." `CallbackRegistryMixin:TriggerEvent` runs each callback through
-  `securecallfunction`, so editing the text there shouldn't taint Blizzard's own send
-  (**verify**). It also fires after a slash command has run, with an empty box. Check
-  for text before touching it.
+  `securecallfunction`, so editing the text there doesn't taint Blizzard's own send.
+  - **Confirmed** outdoors: a callback registered from `/run` code appended text with
+    `SetText`. `SAY` (also in combat), `EMOTE`, `PARTY` and `WHISPER` went out with the
+    change and no error. Outdoors, addon code on a key press may send all four itself,
+    so this can't show whether Blizzard's send stayed untainted. That only matters where
+    tainted sends are blocked (instances, lockdown): **verify** with the dungeon checks.
+  - It also fires after a slash command has run, with an empty box. Check for text before
+    touching it.
+  - After the hook, `ChatFrameUtil.SubstituteChatMessageBeforeSend` rewrites group tags
+    (`{group1}` → `{g1}`). In English that only makes the text shorter.
+- **Sticky chat types and reopening the box.** After a send, the box keeps its type for
+  `SAY`, `PARTY`, `RAID`, `INSTANCE_CHAT`, `GUILD`, `OFFICER`, `WHISPER` and `CHANNEL`
+  (`ChatTypeInfoConstants.lua`). `EMOTE` isn't sticky: the box falls back to the last
+  sticky type. `ChatFrameUtil.OpenChat(text)` reopens the box with text in it. Called
+  from addon code, it writes Blizzard state (`ACTIVE_CHAT_EDIT_BOX`, `editBox.text`,
+  `editBox.setText`). The box applies the text on its next frame (`OnUpdate` →
+  `SetText`, `ParseText`); that code reads the fields addon code wrote, so it probably
+  runs tainted. A leading `/e` would then store a tainted chat type: the type is a frame
+  attribute (`GetAttribute("chatType")`), and `SendText` reads it on the next Enter.
+  **Confirmed** outdoors: `OpenChat` from a timer reopened the box in Say mode, and with
+  `/e …` in Emote mode. Enter sent both with no error, and `/e` and `/s` typed afterwards,
+  without a reload, went out too. As with the hook, outdoors can't show whether those
+  sends were tainted.
 - **Ordering and the server throttle**: sending `SAY`/`EMOTE`/`YELL` too fast gets
   messages dropped or reordered. The robust pattern is to send one chunk, wait for its
-  own echo (`CHAT_MSG_SAY`, `CHAT_MSG_EMOTE`, …), then send the next. During chat
-  lockdown those echoes are secret values (**verify** how that affects matching).
+  own echo (`CHAT_MSG_SAY`, `CHAT_MSG_EMOTE`, …), then send the next.
+  - **Confirmed** outdoors, in and out of combat: your own messages echo as
+    `CHAT_MSG_SAY`, `CHAT_MSG_EMOTE` and `CHAT_MSG_WHISPER_INFORM`, with readable (not
+    secret) text.
+  - In a party you lead, the echo is `CHAT_MSG_PARTY_LEADER`, not `CHAT_MSG_PARTY`.
+  - During chat lockdown those echoes are secret values (**verify** how that affects
+    matching).
 - **Throttling**: the server drops or disconnects on message floods. Space out
   automatic sends (**verify** safe intervals on Forever).
 
@@ -87,6 +161,8 @@
 
 - **`C_ChatInfo.InChatMessagingLockdown()`** returns `true` while chat-related API
   security restrictions are in effect (Midnight-era: encounters, Mythic+, rated PvP).
+  **Confirmed** `false` outdoors, in and out of combat (`IsInInstance()` also `false`).
+  Dungeon and boss fight: **verify**.
 - During lockdown, `CHAT_MSG_*` event payloads are **secret values**
   (`SecretInChatMessagingLockdown` in Blizzard's docs). Addon code can't read or
   compare them. Check `issecretvalue(x)` before touching a chat payload.
@@ -105,10 +181,17 @@
   covers the chat functions, `SimpleEditBoxAPIDocumentation.lua` the chat box limits.
   A shallow clone sits next to this repo as `../wow-ui-source-forever` for local
   searching; `git pull` it after Forever patches. The mirror can trail the client: on
-  2026-11-03 it was at build 70009 while the client was at 70755.
+  2026-11-05 it was still at build 70009 while the client was at 70790.
 - After an in-game session, evidence can be read from disk: BugGrabber's errors in
   `WTF\Account\<account>\SavedVariables\!BugGrabber.lua`, taint in `Logs\taint.log`
   (`/console taintLog 1`), screenshots in `Screenshots\`.
+  - BugGrabber reports `ADDON_ACTION_BLOCKED` **once per addon per session** (its
+    `badAddons` table) and turns off Blizzard's own "Interface action failed" message,
+    so later blocks in that session are silent. All `/run` code counts as one addon,
+    `*** ForceTaint_Strong ***`. `/reload` before each check that might be blocked.
+  - `taintLog` isn't saved in `Config.wtf`, so set it again after every restart. No
+    `taint.log` appeared in the first round, probably because the restart in check 1.4
+    had already turned it off.
 
 ## Prior art
 

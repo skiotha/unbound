@@ -72,9 +72,16 @@ docs/                       -- design notes and API reference (never shipped)
 
 - Send with **`C_ChatInfo.SendChatMessage`**, not the deprecated global.
 - `CHANNEL` always needs a hardware event, and so do `SAY` / `YELL` outside instances.
-  Never send those from a timer or event handler. Each chunk must be triggered by a key
-  press or click.
-- 255 **bytes** per message. Never split inside a UTF-8 sequence, a hyperlink or a
+  On Forever `EMOTE` needs one outdoors too, unlike Retail (see `docs/forever-api.md`).
+  Never send those from a timer or event handler; the send must run inside a key press
+  or click handler.
+- **Unbound stays fully inactive inside instances**: no hooks, no lifted chat box limits,
+  so chat there is pure Blizzard. Decided before the dungeon checks; revisit only with
+  their results.
+- Forever names are two-part: `UnitName(unit)` returns first name and surname, not
+  name and realm. Never build a whisper target from the first name alone.
+- 255 **bytes** per message, counted in bytes (confirmed in game; one byte more raises a
+  Lua error and nothing is sent). Never split inside a UTF-8 sequence, a hyperlink or a
   colour escape.
 - Respect chat lockdown: check `C_ChatInfo.InChatMessagingLockdown()` and treat
   `CHAT_MSG_*` payloads as possibly secret (`issecretvalue`).
