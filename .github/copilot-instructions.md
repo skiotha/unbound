@@ -11,7 +11,8 @@
 - Target client: **World of Warcraft: Forever** (interface `16001`). Forever runs the
   **Retail** API with Midnight-era restrictions, not the Classic API.
 - Feature details are still being designed. Don't add behaviour beyond what has been
-  agreed.
+  agreed. The agreed stages are in [`docs/roadmap.md`](../docs/roadmap.md); build only
+  the current one.
 - Main use: long roleplay messages in `SAY`, `EMOTE`, group (`PARTY`) and `WHISPER`,
   in calm settings. Other chat types are lower priority.
 - Default language is **English**. Text handling must still be UTF-8 safe.
@@ -85,11 +86,15 @@ docs/                       -- design notes and API reference (never shipped)
 - 255 **bytes** per message, counted in bytes (confirmed in game; one byte more raises a
   Lua error and nothing is sent). Never split inside a UTF-8 sequence, a hyperlink or a
   colour escape.
-- Say and emote share a server limit of 15 messages, counted in messages, not bytes, and
-  back in full within about 11 s (confirmed in game). Refused sends are dropped with no
-  Lua error, only one `ERR_CHAT_THROTTLED` system line each (`CHAT_MSG_SYSTEM`).
-  Whispers don't count toward it. A burst must fit in what's left of the 15 after the
-  say and emote messages of the last 12 s, typed ones included.
+- Say and emote share an observed limit of 15 messages, counted in messages, not bytes.
+  No recovery was seen at the tested gaps through about 8 s; bursts 10 s apart worked.
+  A burst must fit in what's left of the 15 after the say and emote messages of the last
+  12 s, typed ones included. This is a conservative estimate, not a guaranteed quota.
+- Whispers are not unrestricted: one batch of 20 self-whispers delivered 10 promptly,
+  five about 10 s later, and refused five. The source of the delay is unknown.
+  An API return is not delivery confirmation; wait for echoes before retrying.
+  `ERR_CHAT_THROTTLED` arrives asynchronously via `CHAT_MSG_SYSTEM` with no chunk ID.
+  See `docs/forever-api.md` for the measured limits and remaining uncertainties.
 - Send every chunk with the chat box's `languageID`, as Blizzard's `SendText` does, so
   all chunks go out in the language the player picked.
 - Respect chat lockdown: check `C_ChatInfo.InChatMessagingLockdown()` and treat

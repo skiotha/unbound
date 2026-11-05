@@ -68,6 +68,7 @@ same command on every push (see `.github/workflows/test.yml`).
 | -------------------------------------------- | ---------------------------------------------------------------- |
 | [forever-api.md](docs/forever-api.md)        | What's specific about the Forever client and the chat API we use |
 | [client-checks.md](docs/client-checks.md)    | In-game checks that confirm the API facts                        |
+| [roadmap.md](docs/roadmap.md)                | Planned stages from the first release to the full addon          |
 | [copilot-instructions.md](.github/copilot-instructions.md) | Project rules for contributors and AI agents         |
 
 ## License

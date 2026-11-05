@@ -9,16 +9,22 @@
 ## Checked in game
 
 First round: 2026-11-05 (launch day), client `1.60.1.70790`, open world only, with
-BugGrabber, BugSack and Total RP 3 loaded. Second to fourth rounds: later the same
+BugGrabber, BugSack and Total RP 3 loaded. Second to fifth rounds: later the same
 day, same setup (build not re-checked). Results are filed under their topics below.
 
 Still open:
 
 - Dungeon (out of combat) and boss fight: client-checks 3.7, 4.3, 5.4 and 6. They need a
   levelled character. Until then Unbound stays off in instances (project rule).
-- No check yet: how the say/emote limit refills within its first 11 s, whether whispers
-  and party chat have limits of their own, how the server counts hyperlink markup, and
-  safe spacing between automatic sends.
+- The exact say/emote reset mechanism, including whether refused attempts extend the
+  wait. Check 10 found no recovery at the tested gaps below about 10 s.
+- Whisper pacing and recovery: check 10 found delayed delivery and refusals. Where
+  the delay happens (client, server or another addon), and whether self-whispers behave
+  like whispers to another player, remain untested.
+- **TODO, deferred until group testing is possible:** whether party chat has a limit of
+  its own or shares the say/emote limit (check 10).
+- No check yet: how the server counts hyperlink markup, and safe spacing between
+  automatic sends.
 
 ## The client
 
@@ -173,7 +179,7 @@ Still open:
   - In a party you lead, the echo is `CHAT_MSG_PARTY_LEADER`, not `CHAT_MSG_PARTY`.
   - During chat lockdown those echoes are secret values (**verify** how that affects
     matching).
-- **Throttling**: **confirmed** outdoors (client-checks 8.5 and 9). `SAY` and `EMOTE`
+- **Throttling**: **confirmed** outdoors (client-checks 8.5, 9 and 10). `SAY` and `EMOTE`
   share one limit of **15 messages**, counted in messages, not bytes. Of 20 sent on one
   key press, the first 15 arrived every time: full-length or short, all in say or 10
   says then 10 emotes. For each of the rest the client printed a yellow system line:
@@ -181,17 +187,36 @@ Still open:
   message." Those messages were dropped, not queued or delayed, and Lua saw no error
   (BugGrabber stayed empty).
   - That line is `ERR_CHAT_THROTTLED` (**confirmed** on Forever, same text), delivered
-    as `CHAT_MSG_SYSTEM`, one per refused message. Arrived and refused always added up
-    to the number sent, and the refused ones were always the last of the burst, so code
-    can tell which chunks were lost.
-  - The limit comes back fast. Bursts of 20 sent 11, 12, 31, 61 and 122 s after the
-    previous one got 15 through, the same as after a 3-minute rest. Refusals left no
-    penalty: 11 s after a clean burst of 15 and 12 s after a burst with 5 refused, the
-    next burst got 15 through both times. Not measured: how it refills within those
-    first 11 s (all at once, or a few messages a second).
-  - Whispers don't count toward it: 10 says and 10 whispers to yourself from one key
-    press all arrived. Untested: whether whispers have a limit of their own, and party
-    chat.
+    as `CHAT_MSG_SYSTEM`, one per refused message in the isolated tests. In check 9,
+    arrived and refused added up to the number sent, with refusals at the end of the
+    burst. The system line has no chunk identifier: match own echoes before deciding
+    which chunks to retry, especially if delivery is delayed or other sends overlap.
+  - **Recovery:** check 10 started with 15 successful says after a rest. Another 15 at
+    2 s got none through; a further retry about 2 s later also failed. Fresh rested
+    trials at a 5 s target (the screenshot shows a rounded 6 s gap) and about 8 s also
+    got none through. Three bursts of 15 spaced about 10 s apart all arrived. This
+    suggests recovery near 10 s, with no partial refill at the sampled times; it does
+    not establish an exact boundary, a fixed versus rolling window, or whether refused
+    attempts restart a cooldown.
+  - Check 9 also got 15 through after gaps of 11, 12, 31, 61 and 122 s, as after a
+    3-minute rest. No refusal penalty persisted beyond the tested 11-12 s gaps. A
+    budget counting recent sends over 12 s is a conservative estimate from these
+    observations, not a guaranteed server quota or an API-provided reset time.
+  - **Whispers are also throttled, and can be delayed.** In check 10, one
+    `UBT.go(20,0,"WHISPER")` submitted 20 short self-whispers: 1-10 arrived promptly,
+    11-15 arrived about 10 s later without another send, and the last five were
+    refused with the same system text. The helper called the send API in a loop; its
+    timers only printed. The source of the delay is unknown. A self-whisper appears
+    twice in chat (received and sent); only `CHAT_MSG_WHISPER_INFORM` counts here.
+    Do not treat a successful API return, or a missing echo after 3 s, as a delivery
+    result. Retrying delayed chunks early could duplicate them.
+  - In check 9, 10 says plus 10 self-whispers all arrived. That rules out a simple
+    shared 15-message cap for that mixed burst, not all interaction between their
+    limits. It does not make whispers unlimited. Party-chat testing remains deferred.
+  - **Check 10 helper correction:** the original immediate summary ran before chat
+    events arrived, printing `0 ok, 0 limited` even when delivery or refusals followed.
+    Its totals are invalid; the results above use the visible numbered messages,
+    system lines and reported timing. The checklist now uses explicit snapshots.
   - Disconnects on floods are reported for Retail; none on Forever (check 9 sent 235
     messages in under half an hour).
 

@@ -271,7 +271,7 @@ minutes to recover, rest that long instead.
    The summary, and a clock that counts from the last burst:
 
    ```
-   /run local u=UBT u.r=function(n,a,b,t)C_Timer.After(3,function()print(("ub %d %s%s: %d ok, %d limited, gap %s %s"):format(n,a,b and"+"..b or"",u.p,u.d,u.g,u.e or""))end)u.k(t)end
+   /run local u=UBT u.r=function(n,a,b,t)C_Timer.After(3,function()if u.t~=t then return end print(("ub %d %s%s: %d ok, %d limited, gap %s %s"):format(n,a,b and"+"..b or"",u.p,u.d,u.g,u.e or""))end)u.k(t)end
    ```
 
    ```
@@ -284,16 +284,18 @@ minutes to recover, rest that long instead.
    `/run UBT.go(20,1,"SAY","EMOTE")` sends 10 says, then 10 emotes. Whispers go to
    yourself.
 
-   Three seconds after each burst a summary appears, for example
+   Three seconds after each burst a snapshot appears, for example
    `ub 20 SAY: 15 ok, 5 limited, gap 12 s CHAT_MSG_SYSTEM`:
    - **ok**: messages that came back;
-   - **limited**: limit messages (if ok and limited don't add up to the number sent, some
-     refusals came without one);
+   - **limited**: limit messages. If ok and limited don't add up to the number sent,
+     messages may still be pending or an outcome may be missing; don't assume refusal.
    - **gap**: time since the previous burst (`-` for the first);
    - the last word: the event that carried the limit message.
 
    Then the clock prints `ub +5 s`, `ub +10 s`, … up to `ub +180 s`. A new burst restarts
-   it. Screenshots of the summary lines are all this check needs.
+   it and suppresses an older scheduled snapshot. Don't start another burst while
+   messages remain unaccounted for: delayed events could be counted against the new
+   burst. Check 10 provides a manual snapshot for following delayed outcomes.
 
 3. After a rest: `/run UBT.go(20,1,"SAY")`. Is it 15 ok again? If all 20 arrived, rest
    and send 30 instead.
@@ -310,10 +312,102 @@ minutes to recover, rest that long instead.
 7. Short messages. Rest, then `/run UBT.go(20,0,"SAY")`. 15 ok means the limit counts
    messages, whatever their length. If all 20 arrived, rest and send 40.
 8. Optional, whispers. Rest, then `/run UBT.go(20,1,"SAY","WHISPER")`: 10 says, then 10
-   whispers to yourself. 15 ok in total means whispers share the limit with say.
+   whispers to yourself. Compare completed outcomes with say alone; neither 15 nor 20
+   arrivals by itself establishes how the limits interact over time.
 
 Answers: how many messages Unbound may send at once, how long the rest has to wait, and
 whether Unbound can work out that wait from the messages it sees.
+
+## 10. Say recovery and whisper limit
+
+This round checks say recovery and whisper throttling. It does not need a group.
+Results are recorded in [forever-api.md](forever-api.md#sending-chat). Party-chat testing
+is deferred until a group is available.
+
+**Helper correction:** the original immediate totals ran before chat events arrived.
+Those `0 ok, 0 limited` lines are not results. The helpers below now announce submission
+and report outcomes only when requested. A snapshot can still be incomplete.
+
+Use the `UBT` setup from 9.2. If you have reloaded since then, paste its five setup
+lines again. Then paste these three overrides. The first records the burst size and
+type, announces submission and starts the clock; it does not claim delivery:
+
+```
+/run local u=UBT u.r=function(n,a,b,t)u.n=n u.a=a u.b=b print("ub",n,a,b or"","submitted; gap",u.g)u.k(t)end
+```
+
+The manual snapshot, including elapsed time and unaccounted messages:
+
+```
+/run local u=UBT u.report=function()print(("ub +%.1f s %s%s: %d ok, %d limited, %d unaccounted %s"):format(GetTime()-u.t,u.a,u.b and"+"..u.b or"",u.p,u.d,u.n-u.p-u.d,u.e or""))end
+```
+
+The clock prints through `ub +11 s`:
+
+```
+/run local u=UBT u.k=function(t)for s=1,11 do C_Timer.After(s,function()if u.t==t then print("ub +"..s.." s")end end)end end
+```
+
+### Say recovery
+
+For each trial, rest for 30 seconds with no chat, then send 15 says as a baseline.
+Confirm all 15 numbered echoes arrive before the trial's target. If they don't, stop
+that trial rather than overlap unresolved bursts. At the target, send 15 more says.
+Use a separate rested trial for each target: `+2 s`, `+5 s`, `+8 s`, and `+10 s`.
+
+For example:
+
+```
+/run UBT.go(15,0,"SAY")
+```
+
+Then at `ub +2 s`:
+
+```
+/run UBT.go(15,0,"SAY")
+```
+
+After the echoes or limit messages appear, take a snapshot:
+
+```
+/run UBT.report()
+```
+
+Repeat from a fresh 30-second rest for the other targets, only once the previous burst
+is accounted for. `/run` itself does not count as chat. Note the reported gap and any
+delay before you could press Enter: the timing is approximate. Stop if the client
+reports an error or unexpected delayed messages; keep the screenshots.
+
+### Self-whisper limit
+
+After another 30-second rest, send 20 short whispers to yourself:
+
+```
+/run UBT.go(20,0,"WHISPER")
+```
+
+Take snapshots at roughly 3, 12 and 30 seconds, without sending another burst:
+
+```
+/run UBT.report()
+```
+
+`unaccounted` means neither an outgoing echo nor a refusal has been counted yet.
+Don't resend that text: it might still arrive. Each self-whisper shows both received
+and sent lines, but the watcher counts only the outgoing echo. Save the numbered
+messages, snapshot lines and any throttle messages. If all 20 are accounted for, no
+later snapshot is needed. If any remain unaccounted for at 30 s, report that rather
+than treating them as refused. Do not escalate to a larger burst.
+
+### Deferred: party chat
+
+TODO: when a group is available, prepare a party-aware watcher and test party pacing
+and its interaction with say/emote. The current watcher does not register party echo
+events. No group testing is needed for round 10.
+
+Answers: recovery at the sampled SAY intervals, and the observed delivery and refusal
+timing of one self-whisper burst. These checks do not prove an exact reset mechanism
+or which component delays whispers.
 
 ## Afterwards
 
