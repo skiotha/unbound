@@ -219,6 +219,44 @@ an offline or misspelled name is reported, and the text is kept.
 
 Open: the cap's value? Battle.net whispers are a separate type (see "Later").
 
+Settled 2026-11-06: the cap is **4** (about 970 characters). Unbound watches a whisper
+burst for up to 30 s and prints only on a problem, in one line: pieces refused, pieces
+to a player who isn't online, and pieces not yet echoed (they may still arrive).
+Battle.net whispers stay unsplit.
+
+Built 2026-11-06 as version 0.4.0. Choices made while building:
+
+- Echoes are matched to pieces by text, so whispers typed meanwhile don't count. The
+  watch ends as soon as every piece is echoed, refused or answered with "No player
+  named …", and after 30 s at the latest. A late echo after that is ignored.
+- A throttle line names no piece. It counts for a say/emote burst while that burst's
+  3 s window is open, otherwise for the oldest open whisper burst.
+- The "No player named …" line is matched with Blizzard's own
+  `ERR_CHAT_PLAYER_NOT_FOUND_S`, and its name is compared with each burst's target,
+  ignoring case and `-` versus space.
+
+The gate is [check 13](client-checks.md#13-long-whispers).
+
+Gate run 2026-11-06. **Passed:**
+
+- whispers of 2, 3 and 4 pieces to yourself and to another player, whole and in order,
+  the name typed as `First-Surname` included. Unbound stayed quiet, and Alt+Up brought
+  each post back as a whisper to the same name;
+- the over-cap post (5 pieces): nothing sent, Unbound named the cap of 4, and Alt+Up
+  brought it back;
+- a name that isn't online: one Unbound line, "2 of 2 whispers didn't arrive", printed
+  at once rather than after 30 s, and the post kept;
+- everyday whispers and `/reload`;
+- the optional crowded burst: 10 short self-whispers, then a 4-piece whisper about a
+  second later. All 14 arrived promptly, and Unbound stayed quiet.
+
+> ✅ **Completed 2026-11-06.** Divergences from the text above: none. Refusals and the
+> "may still arrive" report weren't exercised in game, because the crowded burst got
+> everything through. Forced whisper refusals and late whispers are 1.3's gate.
+> Unbound's line about a missing player printed above Blizzard's last "No player
+> named …" line (see [forever-api.md](forever-api.md#sending-chat)). That's cosmetic,
+> and it's left as is for now.
+
 ## 0.5 Party
 
 Long party messages, same flow as 0.3. Party needs no key press, but uses the same

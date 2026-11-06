@@ -210,6 +210,7 @@ Enum = {
 }
 
 ERR_CHAT_THROTTLED = "The number of messages that can be sent is limited, please wait to send another message."
+ERR_CHAT_PLAYER_NOT_FOUND_S = "No player named '%s' is currently playing."
 
 function IsInInstance()
     return WowStub.inInstance, WowStub.inInstance and "party" or "none"

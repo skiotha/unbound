@@ -12,7 +12,8 @@ First round: 2026-11-05 (launch day), client `1.60.1.70790`, open world only, wi
 BugGrabber, BugSack and Total RP 3 loaded. Second to sixth rounds: later the same
 day, same setup (build not re-checked). The first run of the 0.3 gate (check 12),
 with Unbound 0.3.0, was the same day too, and its last three steps were rerun on
-2026-11-06. Results are filed under their topics below.
+2026-11-06. The 0.4 gate (check 13), with Unbound 0.4.0, ran on 2026-11-06. Results
+are filed under their topics below.
 
 Still open:
 
@@ -21,8 +22,9 @@ Still open:
 - The exact say/emote reset mechanism, including whether refused attempts extend the
   wait. Check 10 found no recovery at the tested gaps below about 10 s.
 - Whisper pacing and recovery: check 10 found delayed delivery and refusals. Where
-  the delay happens (client, server or another addon), and whether self-whispers behave
-  like whispers to another player, remain untested.
+  the delay happens (client, server or another addon) remains untested. So does
+  whether whispers to another player are paced like self-whispers: check 13.5 sent
+  them only 2 to 4 at a time.
 - **TODO, deferred until group testing is possible:** whether party chat has a limit of
   its own or shares the say/emote limit (check 10).
 - Whether the server counts hyperlink markup in full. Chunks that count it in full
@@ -70,9 +72,15 @@ Still open:
     (`Constants.CharacterNameSeparatorConsts.CHARACTERNAME_SURNAME_SEPARATOR`, set by
     the client). **Confirmed**: the separator is a space (`First Surname`).
   - Typed whispers accept both `First-Surname` and `First Surname` (`ExtractTellTarget`
-    in `ChatFrameEditBox.lua`).
+    in `ChatFrameEditBox.lua`). **Confirmed** with Unbound 0.4.0 (check 13.5): a long
+    whisper typed to `First-Surname` arrived split, like one to `First Surname`.
   - **Confirmed**: sending a `WHISPER` to `UnitName("player")` fails with "No player named
     '<first name>' is currently playing." Sent to the full name, it arrives.
+  - **Confirmed** (check 13.4): that line is `ERR_CHAT_PLAYER_NOT_FOUND_S`, delivered
+    as `CHAT_MSG_SYSTEM`, once per message sent (two for a 2-piece whisper). It carries
+    the name as typed.
+  - **Confirmed** (check 13.2): a whisper's `CHAT_MSG_WHISPER_INFORM` echo carries the
+    target's full name, joined with a space (`First Surname`), as its second argument.
   - Whisper chunks should reuse the target Blizzard's chat box already resolved
     (`editBox:GetTellTarget()`) instead of building a name.
 
@@ -202,6 +210,9 @@ Still open:
       link arrived whole and coloured, inside one chunk.
     - A long say sent during a fight arrived with no error: Unbound's own sends from
       the hook get through in combat outdoors.
+  - **Confirmed** with Unbound 0.4.0 (check 13), outdoors: whispers of 2, 3 and 4 full
+    255-byte chunks arrived complete and in order, to yourself and to another player.
+    `editBox:GetTellTarget()` works as the send's `target`.
   - Macros don't fire it. Macro lines go through a separate box built on
     `ChatFrameEditBoxBaseMixin`, whose `OnPreSendText` is empty
     (`MacroExecutionManager.lua`). Only typed chat reaches the hook.
@@ -230,8 +241,17 @@ Still open:
     `CHAT_MSG_SAY`, `CHAT_MSG_EMOTE` and `CHAT_MSG_WHISPER_INFORM`, with readable (not
     secret) text.
   - In a party you lead, the echo is `CHAT_MSG_PARTY_LEADER`, not `CHAT_MSG_PARTY`.
+  - **Confirmed** (check 13.2): a whisper echo's text equals the sent text, byte for
+    byte. Unbound matched every chunk by text and stayed quiet. The chunks of one burst
+    echoed in the same frame (one `GetTime()` value).
   - During chat lockdown those echoes are secret values (**verify** how that affects
     matching).
+  - An addon's event frame can get a chat event before the chat window shows it
+    (**confirmed**, check 13.4). Unbound printed its report while handling the second
+    "No player named …" line, and the report appeared above that line. The likely
+    reason is that chat windows register their message events after addons load; that
+    isn't checked in the source. A `/run` watcher registers later, so its lines come
+    after the chat window's.
 - **Throttling**: **confirmed** outdoors (client-checks 8.5, 9 and 10). `SAY` and `EMOTE`
   share one limit of **15 messages**, counted in messages, not bytes. Of 20 sent on one
   key press, the first 15 arrived every time: full-length or short, all in say or 10
@@ -272,6 +292,11 @@ Still open:
     twice in chat (received and sent); only `CHAT_MSG_WHISPER_INFORM` counts here.
     Do not treat a successful API return, or a missing echo after 3 s, as a delivery
     result. Retrying delayed chunks early could duplicate them.
+  - Check 13.7 sent 10 short self-whispers from one `/run`, then a 4-chunk whisper
+    from Unbound about a second later. All 14 arrived promptly, the 4 chunks echoing in
+    one frame, with no system line. So the 10 prompt whispers of check 10 aren't a
+    simple cap of 10 per few seconds. Whether the gap or the single 20-message loop made
+    the difference is untested.
   - In check 9, 10 says plus 10 self-whispers all arrived. That rules out a simple
     shared 15-message cap for that mixed burst, not all interaction between their
     limits. It does not make whispers unlimited. Party-chat testing remains deferred.

@@ -96,12 +96,12 @@ describe("ChatBox", function()
             expect(WowStub.printed[1]).toContain("Alt+Up")
         end)
 
-        it("keeps long text in other chat types unsent, with the whisper target", function()
-            local box = WowStub.newChatEditBox({ text = longText(2), chatType = "WHISPER", tellTarget = "Ek Palewind" })
+        it("keeps long text in other chat types unsent", function()
+            local box = WowStub.newChatEditBox({ text = longText(2), chatType = "PARTY" })
             WowStub.sendText(box)
             expect(#WowStub.sent).toEqual(0)
-            expect(box.history).toEqual({ "/w Ek Palewind " .. longText(2) })
-            expect(WowStub.printed[1]).toContain("say and emote")
+            expect(box.history).toEqual({ "/p " .. longText(2) })
+            expect(WowStub.printed[1]).toContain("say, emote and whispers")
         end)
 
         it("keeps text the splitter rejects and reports the error", function()
@@ -193,6 +193,113 @@ describe("ChatBox", function()
                 WowStub.fireEvent("CHAT_MSG_SYSTEM", ERR_CHAT_THROTTLED)
                 WowStub.runTimers()
                 expect(#WowStub.printed).toEqual(0)
+            end)
+        end)
+
+        describe("whispers", function()
+            local TARGET = "Ek Palewind"
+            local NOT_FOUND = ERR_CHAT_PLAYER_NOT_FOUND_S:format(TARGET)
+
+            -- Distinct chunks ("aaa…", "bbb…", …) so echoes can be told apart.
+            local function whisperText(chunkCount)
+                local words = {}
+                for i = 1, chunkCount do words[i] = string.char(96 + i):rep(255) end
+                return table.concat(words, " ")
+            end
+
+            local function whisper(chunkCount)
+                local box = WowStub.newChatEditBox({
+                    text = whisperText(chunkCount), chatType = "WHISPER", tellTarget = TARGET, languageID = 35,
+                })
+                WowStub.sendText(box)
+                return box
+            end
+
+            local function echo(i)
+                WowStub.fireEvent("CHAT_MSG_WHISPER_INFORM", WowStub.sent[i][1], TARGET)
+            end
+
+            it("sends a long whisper in chunks to the box's target, in its language, and keeps it", function()
+                local box = whisper(3)
+                expect(sentTexts()).toEqual(ns.SplitText(whisperText(3)))
+                for _, message in ipairs(WowStub.sent) do
+                    expect({ message[2], message[3], message[4] }).toEqual({ "WHISPER", 35, TARGET })
+                end
+                expect(box.history).toEqual({ "/w Ek Palewind " .. whisperText(3) })
+                expect(box.text).toEqual("")
+            end)
+
+            it("stays quiet when every chunk echoes back", function()
+                whisper(3)
+                echo(1) echo(2) echo(3)
+                WowStub.runTimers()
+                expect(#WowStub.printed).toEqual(0)
+            end)
+
+            it("keeps an over-cap whisper unsent, naming the whisper cap", function()
+                local box = whisper(5)
+                expect(#WowStub.sent).toEqual(0)
+                expect(box.history).toEqual({ "/w Ek Palewind " .. whisperText(5) })
+                expect(WowStub.printed[1]).toContain("needs 5 messages")
+                expect(WowStub.printed[1]).toContain("at most 4")
+            end)
+
+            it("reports refusals as soon as every chunk is accounted for", function()
+                whisper(3)
+                echo(1)
+                WowStub.fireEvent("CHAT_MSG_SYSTEM", ERR_CHAT_THROTTLED)
+                expect(#WowStub.printed).toEqual(0)
+                echo(2)
+                expect(#WowStub.printed).toEqual(1)
+                expect(WowStub.printed[1]).toContain("refused 1 of 3 whispers")
+                expect(WowStub.printed[1]).toContain("Alt+Up")
+                WowStub.runTimers()
+                expect(#WowStub.printed).toEqual(1)
+            end)
+
+            it("reports an offline or misspelled name once", function()
+                whisper(2)
+                WowStub.fireEvent("CHAT_MSG_SYSTEM", NOT_FOUND)
+                WowStub.fireEvent("CHAT_MSG_SYSTEM", NOT_FOUND)
+                WowStub.runTimers()
+                expect(#WowStub.printed).toEqual(1)
+                expect(WowStub.printed[1]).toContain("Ek Palewind")
+                expect(WowStub.printed[1]).toContain("Alt+Up")
+            end)
+
+            it("waits for late chunks and reports the unconfirmed ones as possibly still arriving", function()
+                whisper(3)
+                echo(1)
+                WowStub.fireEvent("CHAT_MSG_WHISPER_INFORM", "a typed whisper", TARGET)
+                expect(#WowStub.printed).toEqual(0)
+                WowStub.runTimers()
+                expect(#WowStub.printed).toEqual(1)
+                expect(WowStub.printed[1]).toContain("2 of 3 whispers")
+                expect(WowStub.printed[1]).toContain("may still arrive")
+                echo(2)
+                expect(#WowStub.printed).toEqual(1)
+            end)
+
+            it("doesn't count a say burst's refusals against a whisper", function()
+                whisper(2)
+                WowStub.sendText(WowStub.newChatEditBox({ text = longText(2) }))
+                WowStub.fireEvent("CHAT_MSG_SYSTEM", ERR_CHAT_THROTTLED)
+                WowStub.fireEvent("CHAT_MSG_WHISPER_INFORM", WowStub.sent[1][1], TARGET)
+                WowStub.fireEvent("CHAT_MSG_WHISPER_INFORM", WowStub.sent[2][1], TARGET)
+                WowStub.runTimers()
+                expect(#WowStub.printed).toEqual(1)
+                expect(WowStub.printed[1]).toContain("refused 1 of 2 messages")
+            end)
+
+            it("doesn't read secret echoes or system messages", function()
+                whisper(2)
+                WowStub.secretValues[WowStub.sent[1][1]] = true
+                WowStub.secretValues[NOT_FOUND] = true
+                echo(1)
+                WowStub.fireEvent("CHAT_MSG_SYSTEM", NOT_FOUND)
+                echo(2)
+                WowStub.runTimers()
+                expect(WowStub.printed[1]).toContain("1 of 2 whispers")
             end)
         end)
     end)

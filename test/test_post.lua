@@ -34,13 +34,19 @@ describe("PlanPost", function()
     end)
 
     it("sends up to the cap of 8 chunks and keeps anything longer", function()
-        expect(ns.MAX_CHUNKS).toEqual(8)
         expect(#ns.PlanPost(longText(8), "SAY").chunks).toEqual(8)
-        expect(ns.PlanPost(longText(9), "SAY")).toEqual({ action = "keep", reason = "cap", count = 9 })
+        expect(ns.PlanPost(longText(9), "SAY")).toEqual({ action = "keep", reason = "cap", count = 9, cap = 8 })
+    end)
+
+    it("splits long whispers with a cap of 4 chunks", function()
+        local plan = ns.PlanPost(longText(4), "WHISPER")
+        expect(plan.action).toEqual("send")
+        expect(#plan.chunks).toEqual(4)
+        expect(ns.PlanPost(longText(5), "WHISPER")).toEqual({ action = "keep", reason = "cap", count = 5, cap = 4 })
     end)
 
     it("keeps long text in chat types it doesn't split yet", function()
-        for _, chatType in ipairs({ "YELL", "PARTY", "WHISPER", "BN_WHISPER", "CHANNEL", "GUILD" }) do
+        for _, chatType in ipairs({ "YELL", "PARTY", "BN_WHISPER", "CHANNEL", "GUILD" }) do
             expect(ns.PlanPost(longText(2), chatType)).toEqual({ action = "keep", reason = "chatType" })
         end
     end)

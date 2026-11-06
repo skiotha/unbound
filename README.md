@@ -4,8 +4,9 @@ A World of Warcraft addon that splits a long chat message into chunks and sends
 them one by one. Built for **World of Warcraft: Forever**, mostly for
 personal use.
 
-> Early development. Long says and emotes are split and sent on one Enter, outdoors.
-> Stage 0.3 of the [roadmap](docs/roadmap.md) is complete: its in-game gate passed.
+> Early development. Long says, emotes and whispers are split and sent on one Enter,
+> outdoors. Stage 0.4 of the [roadmap](docs/roadmap.md) is complete: its in-game gate
+> passed.
 
 - **Zero external dependencies**: no Ace3, LibStub or other third-party libraries.
 - Currently not distributed via CurseForge / WoWInterface / whatever.
@@ -43,19 +44,23 @@ read their release notes.
 
 ## Usage
 
-Outdoors, type a long say or emote and press Enter once. Unbound splits it into
-messages of up to 255 bytes and sends them all, in order, in the language picked in
-the chat box. Short messages are left to Blizzard.
+Outdoors, type a long say, emote or whisper and press Enter once. Unbound splits it
+into messages of up to 255 bytes and sends them all, in order, in the language picked
+in the chat box. Short messages are left to Blizzard.
 
-- One Enter sends at most **8** messages (about 1,950 characters). A longer post isn't
-  sent.
-- Long text in other chat types (party, whispers, yell, channels) isn't split yet, and
-  isn't sent either.
+- One Enter sends at most **8** says or emotes (about 1,950 characters), or **4**
+  whispers (about 970 characters). A longer post isn't sent.
+- Long text in other chat types (party, Battle.net whispers, yell, channels) isn't
+  split yet, and isn't sent either.
 - Every split or unsent post is kept in the chat box history. Open the chat box and
   press Alt+Up to get it back. The history doesn't survive `/reload`.
 - If the server refuses some of the messages, Unbound says how many. It doesn't resend.
   Alt+Up brings back the whole post, including the messages that arrived, so delete
   those before you send it again.
+- After a long whisper, Unbound waits up to 30 s for every piece to show up. It says
+  nothing if all of them do. Otherwise it reports pieces refused, pieces to a player
+  who isn't online, and pieces that haven't shown up yet. Those may still arrive, so
+  don't resend them right away.
 - In instances and during chat lockdown, Unbound stays off and the chat box is
   Blizzard's own.
 - `/unbound` or `/ub`: show the version and the list of commands.

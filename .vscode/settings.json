@@ -23,6 +23,9 @@
     "afterEach",
     "loadAddon",
     "WowStub",
-    "SlashCmdList"
+    "SlashCmdList",
+    "ERR_CHAT_THROTTLED",
+    "ERR_CHAT_PLAYER_NOT_FOUND_S",
+    "ChatFrameUtil"
   ]
 }

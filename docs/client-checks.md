@@ -559,6 +559,60 @@ records only blocked actions.
 Answers: whether 0.3 passes its gate, whether the history keeps a line over 1,280
 bytes, and whether Unbound can send in combat outdoors.
 
+## 13. Long whispers
+
+The gate for stage 0.4: Unbound 0.4.0 sends a long whisper on one Enter, at most 4
+messages, and reports any problem with it. Same setup as check 12: Total RP 3 loaded,
+BugSack on, `taintLog` on, outdoors and out of combat. Wait about 15 s between posts.
+A second player helps with step 5; if no one is around, run the rest and mark 5
+deferred.
+
+The posts come from check 12's line, with `c` set to a whisper. For yourself that's
+`n,c=2,"/w First Surname "` (your full name, as in check 3.1).
+
+After a whisper burst Unbound waits up to 30 s for every piece's echo. It stays quiet
+if they all come back. Otherwise it reports pieces refused, pieces to a player who
+isn't online, and pieces that haven't shown up yet (they may still arrive).
+
+1. `/reload`. `/ub` shows `v0.4.0`. Start this watcher, once. For every outgoing `ub…`
+   whisper it prints the piece number, its bytes, the name the echo carries and the
+   time:
+
+   ```
+   /run local f=CreateFrame"Frame"f:RegisterEvent"CHAT_MSG_WHISPER_INFORM"f:SetScript("OnEvent",function(_,_,t,n)local i=t:match"^ub(%d+)/"if i then print("INFORM",i,#t,n,GetTime())end end)
+   ```
+
+2. Yourself, `n=2`. Press Enter. Do both pieces arrive, in order? Each shows twice
+   (received and sent). Does the watcher print `1` and `2`, each `255`? Note the name
+   it prints. Wait 30 s: Unbound prints nothing. Alt+Up brings the post back as a
+   whisper to you. Escape. Then the same with `n=3` and `n=4` (the cap, 1,023 bytes).
+3. Over the cap: `n=5`. Nothing is sent, and Unbound says the post needs 5 messages
+   and it sends at most 4. Alt+Up brings it back. Escape.
+4. A name that isn't online: `n,c=2,"/w Nobody Nowhere "` (or any misspelled name).
+   How many "No player named …" lines does the client print? Does Unbound print one
+   line saying that player isn't online and 2 of 2 whispers didn't arrive? If it says
+   instead, after 30 s, that 2 whispers haven't shown up yet, the name in the system
+   line didn't match: keep a screenshot. Alt+Up brings the post back.
+5. Another player: `n=2`, `3` and `4` to their full name. Do they get every piece,
+   whole and in order? Unbound prints nothing. Once, type the name as
+   `First-Surname`: same result?
+6. Everyday chat. A short `/w First Surname ub short` goes out as usual, and Unbound
+   says nothing. `/reload`, then `n=2` to yourself once more. No errors anywhere.
+7. Optional, a crowded burst. After a 30 s rest, this sends 10 short self-whispers and
+   a second later opens the box with a 4-piece whisper to you. It replaces the post line:
+
+   ```
+   /run local w=NameUtil.GetUnmodifiedUnitFullName("player")for i=1,10 do C_ChatInfo.SendChatMessage("ub fill "..i,"WHISPER",nil,w)end local t={}for i=1,4 do t[i]=("ub"..i.."/4 "..("lorem ipsum dolor "):rep(15)):sub(1,255)end C_Timer.After(1,function()ChatFrameUtil.OpenChat("/w "..w.." "..table.concat(t," "))end)
+   ```
+
+   Press Enter as soon as the box opens. Note which pieces arrive and when, any yellow
+   system lines, and what Unbound says within 30 s. Don't resend anything.
+
+Check BugSack and `taint.log` as in check 12.
+
+Answers: whether 0.4 passes its gate, the name format in whisper echoes and in the
+"No player named" line, and how a 4-piece whisper behaves after other whispers.
+
 ## Afterwards
 
 - Note the client build from `/dump GetBuildInfo()` next to the results.
