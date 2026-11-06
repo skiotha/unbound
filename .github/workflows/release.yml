@@ -1,0 +1,91 @@
+name: Prepare release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Validate version and package addon
+        id: package
+        shell: pwsh
+        run: |
+          $toc = Get-Content -LiteralPath 'Unbound\Unbound.toc'
+          $versions = @($toc | Select-String '^## Version:(.*)$')
+          if ($versions.Count -ne 1) {
+            throw 'The TOC must contain exactly one ## Version line.'
+          }
+          $version = $versions[0].Matches[0].Groups[1].Value.Trim()
+          if ($version -cnotmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
+            throw "Invalid TOC version '$version'; expected MAJOR.MINOR.PATCH."
+          }
+          if ($env:GITHUB_REF_NAME -cne "v$version") {
+            throw "Tag '$env:GITHUB_REF_NAME' does not match TOC version '$version'."
+          }
+
+          $required = @('Unbound.toc', 'Media\Icon.png')
+          $required += $toc | ForEach-Object { $_.Trim() } | Where-Object { $_ -and !$_.StartsWith('#') }
+          foreach ($path in $required) {
+            if (!(Test-Path -LiteralPath (Join-Path 'Unbound' $path) -PathType Leaf)) {
+              throw "Missing addon file: $path"
+            }
+          }
+
+          $stage = Join-Path $env:RUNNER_TEMP 'unbound-release'
+          New-Item -ItemType Directory -Path $stage | Out-Null
+          Copy-Item -LiteralPath 'Unbound' -Destination $stage -Recurse
+          Copy-Item -LiteralPath 'LICENSE' -Destination (Join-Path $stage 'Unbound\LICENSE')
+          $asset = Join-Path $env:RUNNER_TEMP "Unbound-$version.zip"
+          Compress-Archive -LiteralPath (Join-Path $stage 'Unbound') -DestinationPath $asset
+
+          $expected = @(Get-ChildItem -LiteralPath $stage -Recurse -File -Force | ForEach-Object {
+            [System.IO.Path]::GetRelativePath($stage, $_.FullName).Replace('\', '/')
+          })
+          $archive = [System.IO.Compression.ZipFile]::OpenRead($asset)
+          try {
+            $actual = @($archive.Entries | Where-Object { $_.Name } | ForEach-Object { $_.FullName })
+            if (Compare-Object -ReferenceObject $expected -DifferenceObject $actual -CaseSensitive) {
+              throw 'ZIP contents do not match the staged addon and license.'
+            }
+          } finally {
+            $archive.Dispose()
+          }
+
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "asset=$asset" >> $env:GITHUB_OUTPUT
+
+      - name: Create draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ASSET: ${{ steps.package.outputs.asset }}
+          VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME $env:ASSET `
+            --verify-tag --draft --title "Unbound $env:VERSION" --generate-notes
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Could not create the draft release. Check the GitHub CLI error above.'
+          }
+          "Draft ready: https://github.com/$env:GH_REPO/releases" >> $env:GITHUB_STEP_SUMMARY
+          'Review the ZIP and release notes, then publish the draft yourself.' >> $env:GITHUB_STEP_SUMMARY

@@ -27,8 +27,18 @@ docs/                   -- design notes and API reference, that is also not ship
 
 ## Installation
 
-Just copy or link the `Unbound/` folder into the Forever client's
-`_forever_\Interface\AddOns\` directory. Then restart the client. Or type `/reload`.
+1. Open [Releases](https://github.com/skiotha/unbound/releases) and download the
+   `Unbound-<version>.zip` asset. GitHub's **Source code** downloads are not the
+   install-ready package.
+2. Extract the archive and copy its `Unbound` folder into the Forever client's
+   `_forever_\Interface\AddOns\` directory. The TOC must end up at
+   `_forever_\Interface\AddOns\Unbound\Unbound.toc`, with no extra folder around it.
+3. Restart the client after a first install. For an update to an already loaded
+   addon, `/reload` is enough.
+
+If no release has been published yet, copy or link the repository's `Unbound/`
+folder into that same `AddOns` directory. Preview releases may have limitations;
+read their release notes.
 
 ## Usage
 
@@ -79,6 +89,15 @@ lua test/run.lua test/test_defaults.lua # selected files
 On Windows, `winget install rjpcomputing.luaforwindows` provides Lua 5.1.5. CI runs the
 same command on every push (see `.github/workflows/test.yml`).
 
+### Releases
+
+Pushing a version tag such as `v0.3.0` automatically runs the tests and prepares a
+draft GitHub release containing only the addon and its license. The owner reviews
+and publishes it; ordinary commits do not create releases.
+
+See [Releasing Unbound](docs/releasing.md) for the one-time setup and click-through
+VS Code/GitHub instructions.
+
 ### Splitter contract
 
 `ns.SplitText(text)` is pure Lua 5.1, with no WoW API calls or side effects. It returns
@@ -115,6 +134,7 @@ There are no continuation markers, sentence heuristics or configurable limits.
 | [forever-api.md](docs/forever-api.md)                      | What's specific about the Forever client and the chat API we use |
 | [client-checks.md](docs/client-checks.md)                  | In-game checks that confirm the API facts                        |
 | [roadmap.md](docs/roadmap.md)                              | Planned stages from the first release to the full addon          |
+| [releasing.md](docs/releasing.md)                         | Preparing and publishing install-ready GitHub releases           |
 | [copilot-instructions.md](.github/copilot-instructions.md) | Project rules for contributors and AI agents                     |
 
 ## License
