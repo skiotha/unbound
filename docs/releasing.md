@@ -91,9 +91,11 @@ push. The tests inside **Prepare release** are the ones that gate its release jo
    first release, a short feature summary and known limitations are more useful
    than the repository's whole development history.
 3. Confirm that the attached asset is named `Unbound-<version>.zip`.
-4. Download and extract it into a temporary folder. There should be exactly one
+4. Download and extract it into a temporary folder. The ZIP holds exactly one
    top-level folder, `Unbound`, with the TOC directly inside it, plus the Lua files,
    media, and license. There should be no repository-name wrapper, tests, or docs.
+   Windows' **Extract All** adds an `Unbound-<version>` folder around it; that
+   folder comes from the extraction, not from the ZIP.
 5. For a `0.x` preview, select **This is a pre-release**. The roadmap's stable
    first-release milestone remains `1.0`; adding this automation does not complete it.
 6. Click **Publish release** when satisfied.

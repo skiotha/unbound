@@ -31,7 +31,8 @@ docs/                   -- design notes and API reference, that is also not ship
    `Unbound-<version>.zip` asset. GitHub's **Source code** downloads are not the
    install-ready package.
 2. Extract the archive and copy its `Unbound` folder into the Forever client's
-   `_forever_\Interface\AddOns\` directory. The TOC must end up at
+   `_forever_\Interface\AddOns\` directory. Windows' **Extract All** puts it inside an
+   `Unbound-<version>` folder; copy the inner `Unbound` folder. The TOC must end up at
    `_forever_\Interface\AddOns\Unbound\Unbound.toc`, with no extra folder around it.
 3. Restart the client after a first install. For an update to an already loaded
    addon, `/reload` is enough.
