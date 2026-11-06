@@ -177,6 +177,7 @@ box after each send. This checks whether that works and whether it harms later s
 
    The box opens in Say mode with `ub reopened`. Press Enter: does it arrive, with no
    error?
+
 2. Emote mode. The box doesn't stay in Emote mode after a send, so the text starts with
    `/e`:
 
@@ -186,6 +187,7 @@ box after each send. This checks whether that works and whether it harms later s
 
    Does the box switch to Emote with `ub reopened`? Press Enter: does it arrive, or is
    it blocked?
+
 3. Right after 2, without a reload: type `/e ub after` and send it, then `/s ub after`.
    Both should arrive with no error. A block here means reopening left taint in the chat
    box.
@@ -216,6 +218,7 @@ quiet spot.
 
    Do all six appear in chat, in order? Does the watcher print 1 to 6, each `255`? Note
    any system message or red error text, and how far apart the times are.
+
 3. Wait about a minute, then the same line with `n,c=10,"SAY"`.
 4. Wait again, then repeat 2–3 with `"EMOTE"` in place of `"SAY"`.
 5. Optional, only if both runs of 10 arrived complete: wait, then `n,c=15,"SAY"`, to see
@@ -409,7 +412,156 @@ Answers: recovery at the sampled SAY intervals, and the observed delivery and re
 timing of one self-whisper burst. These checks do not prove an exact reset mechanism
 or which component delays whispers.
 
+## 11. Sending from the pre-send event
+
+Stage 0.3 sends every chunk from inside Blizzard's pre-send event (check 5), on the
+Enter that sends the post. Then it empties the box, so Blizzard sends nothing. A post
+that isn't sent in full goes into the chat box history, and Alt+Up brings it back.
+This check tests those steps outdoors before any code relies on them. Pick a quiet
+spot, and `/reload` first so a block would be recorded.
+
+1. Register the test. Any message starting with `ubh` is sent three times from the
+   event (`ubh 1`, `ubh 2`, `ubh 3`), in the box's chat type and language. Then the box
+   is emptied:
+
+   ```
+   /run EventRegistry:RegisterCallback("ChatFrame.OnEditBoxPreSendText",function(_,e)local t=e:GetText()if t:find"^ubh"then for i=1,3 do C_ChatInfo.SendChatMessage(t.." "..i,e:GetChatType(),e.languageID)end e:SetText""end end,"UBTEST")
+   ```
+
+2. `/s ubh`. Do `ubh 1`, `ubh 2` and `ubh 3` arrive, in order, and nothing else (no
+   plain `ubh`)? Any error or "Interface action failed"? Then `/reload`, register again
+   and send `/e ubh`.
+3. Language. Pick your other language in the chat box's language menu, then `/s ubh`.
+   Do all three show that language? Switch back afterwards.
+4. History. Open the box and press Alt+Up. Expect the `/run` line from step 1, not
+   `/s ubh`: an emptied box adds nothing to the history. Press Escape.
+5. Remove the test (or `/reload`):
+
+   ```
+   /run EventRegistry:UnregisterCallback("ChatFrame.OnEditBoxPreSendText","UBTEST")
+   ```
+
+6. A long post in the history. Lift the limits as in 2.2, then add a say of about 730
+   characters to the history. The line is added one frame later, from a timer. Added
+   straight from `/run`, it would sit behind the `/run` line, because Blizzard adds a
+   typed command to the history after running it (that's how the first round of this
+   step went wrong).
+
+   ```
+   /run local e=ChatFrame1EditBox e:SetMaxBytes(0)e:SetMaxLetters(0)e:SetVisibleTextByteLimit(0)
+   ```
+
+   ```
+   /run C_Timer.After(0,function()ChatFrame1EditBox:AddHistoryLine("/s ub kept "..("lorem ipsum dolor "):rep(40))end)
+   ```
+
+   Open the box and press Alt+Up once. Is the box in Say mode, with the text starting
+   `ub kept` and ending in `dolor`? **Press Escape; don't send.** Repeat with `/e` in
+   place of `/s`: does the box switch to Emote? Then `/reload`, which restores the
+   limits, and lift them again with the first line. Press Alt+Up a few times (the lift
+   line and `/reload` come first, if the history survived): does the `/e ub kept` line
+   come back, whole? Escape again.
+
+Answers: whether one Enter can send every chunk from the pre-send event, and whether
+the history can keep a post Unbound didn't send, and for how long. If step 2 is
+blocked, 0.3 falls back to one chunk per Enter.
+
+## 12. Long say and emote
+
+The gate for stage 0.3: Unbound 0.3.0 sends a long say or emote on one Enter,
+outdoors. Play as usual: Total RP 3 loaded, BugSack on, `taintLog` on (see "Before you
+start"). Pick a quiet spot outdoors, out of combat. Wait about 15 s between posts: say
+and emote share a limit of 15 messages in about 12 s, and the posts below add up.
+
+The posts come from this line. It builds `n` numbered pieces of exactly 255 bytes
+(`ub1/5 lorem ipsum …`), so the post splits into exactly `n` messages. A second later
+it opens the chat box with the post. `c` is the chat command in front of it:
+
+```
+/run local n,c=2,"/s "local t={}for i=1,n do t[i]=("ub"..i.."/"..n.." "..("lorem ipsum dolor "):rep(15)):sub(1,255)end C_Timer.After(1,function()ChatFrameUtil.OpenChat(c..table.concat(t," "))end)
+```
+
+To change the post, edit only the values after `local n,c=`. `n=5` means
+`local n,c=5,"/s "`, and `c="/e "` means `local n,c=2,"/e "`. Keep the comma and the
+quotes.
+
+1. `/reload`. `/ub` shows `v0.3.0`. Start the watcher from 8.1: it prints the chat type,
+   the piece number and the bytes of every `ub…` message that comes back. Then open the
+   box and `/dump` its limits with the line from 2.1: expect `0`, `0`, `0`.
+2. Say. Run the line above (`n,c=2,"/s "`). The box opens in Say mode with the post.
+   Press Enter. Do `ub1/2` and `ub2/2` arrive, in order? Does the watcher print `SAY`,
+   `1`, `255` and then `2`? Unbound itself prints nothing. Open the box and press Alt+Up:
+   is the post back, in Say mode? Press Escape. Then the same with `n=5` and `n=8` (the
+   cap, 2,047 bytes).
+3. Emote. The same with `c="/e "`: `n=2`, `5` and `8`. How do the emotes read with
+   your name before each piece? Good enough for roleplay?
+4. Language. Pick your other language in the box's language menu, then a say with
+   `n=2`. Do both pieces show that language? Switch back afterwards.
+5. Typographic characters and links. This opens a say of about 400 bytes with em
+   dashes, curly quotes and ellipses:
+
+   ```
+   /run C_Timer.After(1,function()ChatFrameUtil.OpenChat("/s "..("ub \226\128\148 \226\128\156typographic\226\128\157 lorem\226\128\166 "):rep(12))end)
+   ```
+
+   The links come from your bags. **Open your bags first** (the bag button, or B
+   before you open the chat box: with the box open, B types a letter). Then run the
+   line. When the box opens with the post, hold Shift and click an item in your bags,
+   such as your Hearthstone: its link appears in the text where the cursor is (at the
+   end). Click inside the text to move the cursor, then Shift-click another item. Two
+   or three links in different places, then Enter. Do the dashes, quotes and ellipses
+   arrive intact? Are the links whole, coloured and clickable? Any error?
+
+6. Over the cap: `n=9` (2,303 bytes). Press Enter. Nothing is sent, and Unbound says
+   the post needs 9 messages. Open the box and press Alt+Up, then Enter: does Unbound
+   say 9 again? If it sends anything, the history cut the line at 1,280 bytes.
+7. A refusal. Run this line **once**, after a 15 s rest. It sends 14 short says
+   (`ub fill 1` to `14`), and a second later opens the box with a 3-piece say. It
+   replaces the post line for this step:
+
+   ```
+   /run for i=1,14 do C_ChatInfo.SendChatMessage("ub fill "..i,"SAY")end local t={}for i=1,3 do t[i]=("ub"..i.."/3 "..("lorem ipsum dolor "):rep(15)):sub(1,255)end C_Timer.After(1,function()ChatFrameUtil.OpenChat("/s "..table.concat(t," "))end)
+   ```
+
+   Press Enter as soon as the box opens. 14 + 3 is over 15, so expect `ub1/3` to arrive
+   and two yellow system lines. About 3 s later, does Unbound say `The server refused 2
+of 3 messages`? Does the watcher print only piece `1`? Alt+Up brings the whole post
+   back. Escape.
+
+   If Unbound says nothing, wait 15 s and run this probe. It sends 17 says and prints
+   one line per system message: `during` or `after` the sends, whether the text
+   equals `ERR_CHAT_THROTTLED`, and both lengths in bytes. `/reload` afterwards to
+   remove it.
+
+   ```
+   /run local f,s=CreateFrame"Frame",1 f:RegisterEvent"CHAT_MSG_SYSTEM"f:SetScript("OnEvent",function(_,_,m)print(s and"during"or"after",m==ERR_CHAT_THROTTLED,#m,#ERR_CHAT_THROTTLED)end)for i=1,17 do C_ChatInfo.SendChatMessage("ub p"..i,"SAY")end s=nil
+   ```
+
+8. Other chat types. Whisper yourself: the post line with `n,c=2,"/w First Surname "`
+   (your full name). Press Enter: nothing is sent, Unbound says long text is only split
+   in say and emote, and there's no Lua error. Alt+Up: does it come back whole, as a
+   whisper to you? Escape. If you're in a group, the same with `c="/p "`.
+9. Everyday chat. `/s ub short` arrives as usual. Open the box and press Enter on
+   nothing. `/ub`, and a mistyped command such as `/ubx`. Then `/reload` and post
+   `n=2` in say once more. No errors anywhere.
+10. Optional, other windows. If whispers open in their own chat window, click into
+    its box and paste about 600 characters. Does it take all of them? Escape.
+11. Optional, combat. During a fight with a low-level mob, post `n=2` in say. Does it
+    arrive, or is it blocked ("Interface action failed", an error)? Either way, Alt+Up
+    has the post.
+12. Optional, a dungeon, out of combat. Open the box and `/dump` its limits: expect
+    `1280`, `0`, `255`. Unbound stays off there: `/s ub short` goes out as usual.
+
+Check BugSack. Then quit the game: the client writes `_forever_\Logs\taint.log` at
+logout. Search it for `Unbound`. If there's no file, nothing was logged: level 1
+records only blocked actions.
+
+Answers: whether 0.3 passes its gate, whether the history keeps a line over 1,280
+bytes, and whether Unbound can send in combat outdoors.
+
 ## Afterwards
 
-- `/console taintLog 0`, then `/reload`.
 - Note the client build from `/dump GetBuildInfo()` next to the results.
+- Quit the game, which writes `taint.log` and BugGrabber's file to disk. `taintLog`
+  isn't saved, so it's off next time. To keep playing instead: `/console taintLog 0`,
+  then `/reload`.

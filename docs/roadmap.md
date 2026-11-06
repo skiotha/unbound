@@ -122,26 +122,88 @@ explicitly rather than being split speculatively.
 Type a long say or emote, press Enter once, and all chunks arrive in order. This is
 option 1 from the checks; option 2 (one Enter per chunk) stays the fallback.
 
-- The chat box takes long text outdoors; Blizzard's limits come back in instances and
-  during lockdown.
-- On Enter, Blizzard's pre-send event hands the text to Unbound. It sends the chunks in
-  the same key press, in the chat box's language. Short messages pass untouched.
-- A fixed cap per Enter, well under 15 (10 arrived in checks 8.3 and 8.4). A longer
-  post isn't sent: Unbound says so and keeps the text.
+- The chat box takes long text outdoors, in every chat window's box, whisper windows
+  included. Blizzard's limits come back in instances and during lockdown.
+- On Enter, Blizzard's pre-send event hands the text to Unbound. It sends every chunk
+  itself in the same key press, in the chat box's language, then empties the box so
+  Blizzard sends nothing. A chunk put back in the box would go through Blizzard's slash
+  parsing again: one starting with `/2 ` would go to General (see
+  [Sending chat](forever-api.md#sending-chat)). Short messages pass untouched.
+- **Kept** means in the chat box history. Every split or unsent post goes there in
+  Blizzard's own form (`/say …`, `/emote …`); Alt+Up brings it back. No Blizzard Lua
+  state is written. The history doesn't survive `/reload` (check 11); a saved copy is
+  1.2's question.
+- A fixed cap of **8 chunks** per Enter (about 1,950 characters). It leaves 7 of the
+  15 for typed lines until the budget in 1.1. A longer post isn't sent: Unbound says so
+  and keeps the text.
 - If the server refuses chunks right after a burst (`ERR_CHAT_THROTTLED`), Unbound
-  reports it and keeps the post's text. No resend.
+  reports how many and points to the history. No resend.
+- Long text in other chat types (party, whispers, yell, channels) isn't split yet. It
+  isn't sent either: Unbound says so and keeps it. Left alone, Blizzard's send would
+  raise a Lua error.
 
-**Gate** (new client-checks section, `taintLog` on, BugSack watched):
+**Before building:** [check 11](client-checks.md#11-sending-from-the-pre-send-event).
+It tests sending from the pre-send event, emptying the box and a long post in the
+history. If sends from the event are blocked, 0.3 switches to option 2 first.
+Passed 2026-11-05: sends from the event work for say and emote, in order and in the
+picked language, and an emptied box sends nothing. Alt+Up brings back a 731-byte say
+or emote whole, with its chat type.
+
+**Gate** ([check 12](client-checks.md#12-long-say-and-emote), `taintLog` on, BugSack
+watched, Total RP 3 loaded as usual):
 
 - 2, 5 and cap-sized says and emotes arrive in order, in the right language;
 - review emote readability with the character's name repeated before each chunk;
 - a post with typographic characters and an actual item link; check hyperlink/colour
   acceptance and markup byte counting, without assuming arbitrary colours can be sent;
-- an over-cap post: nothing sent, text kept;
-- a forced refusal (15 typed says first): reported, text kept;
-- slash commands, an empty box and `/reload` cause no errors.
+- an over-cap post: nothing sent, text back with Alt+Up. It's over 1280 bytes, so this
+  also shows whether the history keeps such a line whole;
+- a forced refusal (14 says first, then a 3-chunk post): reported, text back with
+  Alt+Up;
+- a long party message or whisper: not sent, text back with Alt+Up, no Lua error;
+- slash commands, an empty box and `/reload` cause no errors;
+- optional: a long say in combat outdoors, and Blizzard's limits back in a dungeon.
 
-Open: how text is "kept" (the box reopened, or saved for a command)? The cap's value?
+Settled 2026-11-05: text is kept in the chat box history; the cap is 8.
+
+Built 2026-11-05 as version 0.3.0 (`Util/Post.lua`, `ChatBox.lua`). Choices made while
+building:
+
+- The limits are lifted when a chat box gains focus, so whisper windows are covered,
+  and restored when Unbound turns off.
+- Unbound turns off in instances, during chat lockdown, and while any addon
+  restriction other than Combat is on (`ADDON_RESTRICTION_STATE_CHANGED`). Combat
+  stays on: check 5 sent a say from the hook in combat. The gate's combat step checks
+  that Unbound's own sends get through too.
+- Refusals are counted for 3 s after the last burst; a burst sent within that time
+  joins the same report.
+
+Gate run 2026-11-05; links, the forced refusal and Alt+Up on a whisper were rerun on
+2026-11-06. **Passed:**
+
+- says and emotes of 2, 5 and 8 chunks, in order and in the picked language; emotes
+  read fine;
+- typographic characters, and three item links in a 3-chunk say, each whole and
+  coloured;
+- the over-cap post (the history kept all 2,306 bytes);
+- the forced refusal: Unbound reported 2 of 3 refused, and Alt+Up brought the post
+  back;
+- a long whisper refused with no error, back on Alt+Up as a whisper to the same name;
+- everyday chat and `/reload`;
+- a whisper window's box;
+- a long say in combat outdoors.
+
+BugGrabber recorded nothing from Unbound and no blocked action, and no `taint.log`
+was written.
+
+> ✅ **Completed 2026-11-06.** Divergences from the text above: Unbound also turns off
+> while any addon restriction other than Combat is on (see the building choices). The
+> optional dungeon step didn't run, because no dungeon was available. It lands in the
+> instance smoke test and 1.5. The links showed that chunks counting link markup in
+> full get through, not whether the server counts less. That stays open in
+> forever-api.md. No group was available, so the party half of the refused-text step
+> waits for 0.5. Resending a kept post sends the chunks that arrived again. Returning
+> only the rest is 1.3's job.
 
 ## 0.4 Whispers
 
@@ -205,8 +267,9 @@ Posts longer than one burst.
 **Gate:** a 20–30 chunk post. Enter too early shows the hint and nothing is refused;
 after the wait, Enter sends the next part.
 
-Open: where the tail lives (box reopened, or held until the next Enter)? Changing chat
-type or target with a tail pending? Cancelling a tail?
+Open: where the tail lives (box reopened, held until the next Enter, or the history as
+in 0.3)? A saved copy that survives `/reload`? Changing chat type or target with a tail
+pending? Cancelling a tail?
 
 ## 1.3 Delivery tracking
 

@@ -186,3 +186,4 @@ local function splitText(text)
 end
 
 ns.SplitText = splitText
+ns.MAX_MESSAGE_BYTES = MAX_MESSAGE_BYTES

@@ -9,8 +9,10 @@
 ## Checked in game
 
 First round: 2026-11-05 (launch day), client `1.60.1.70790`, open world only, with
-BugGrabber, BugSack and Total RP 3 loaded. Second to fifth rounds: later the same
-day, same setup (build not re-checked). Results are filed under their topics below.
+BugGrabber, BugSack and Total RP 3 loaded. Second to sixth rounds: later the same
+day, same setup (build not re-checked). The first run of the 0.3 gate (check 12),
+with Unbound 0.3.0, was the same day too, and its last three steps were rerun on
+2026-11-06. Results are filed under their topics below.
 
 Still open:
 
@@ -23,8 +25,9 @@ Still open:
   like whispers to another player, remain untested.
 - **TODO, deferred until group testing is possible:** whether party chat has a limit of
   its own or shares the say/emote limit (check 10).
-- No check yet: how the server counts hyperlink markup, and safe spacing between
-  automatic sends.
+- Whether the server counts hyperlink markup in full. Chunks that count it in full
+  arrive (check 12.5), but whether the server would take more is untested. Also
+  untested: safe spacing between automatic sends.
 
 ## The client
 
@@ -122,8 +125,9 @@ Still open:
   of hidden markup (hyperlink codes). That's bytes, not characters (**confirmed**, see
   below). Plain English is 1 byte per character, but typographic characters such as
   `’ “ ” — …` are 3 bytes each in UTF-8, and letters of other languages take 2–3. Emote
-  Splitter also treats 255 bytes as the per-message limit. How the server counts link
-  markup is still **verify**. A chunk split must never:
+  Splitter also treats 255 bytes as the per-message limit. Chunks with item links,
+  counted with all their markup, arrived (**confirmed**, check 12.5). Whether the
+  server counts link markup in full is still **verify**. A chunk split must never:
   - cut a UTF-8 multi-byte sequence in half;
   - break a hyperlink (`|H…|h[…]|h`) or a colour escape (`|cAARRGGBB…|r`).
 
@@ -132,8 +136,9 @@ Still open:
   hex and named colours (`|cnNAME:…|r`, including `|cnIQ4:…|r`). Since 9.0.1,
   `|r` pops the innermost colour, restoring the outer one rather than always
   resetting to the default. The splitter must close/reopen the whole active stack
-  when splitting coloured text. Forever's outgoing colour acceptance and hyperlink
-  byte counting still need client checks.
+  when splitting coloured text. Item links inserted by the client, with their quality
+  colours, are accepted in outgoing chat (check 12.5). Colours outside a link and the
+  server's hyperlink byte counting are untested.
 - **Over the limit, nothing is sent.** `C_ChatInfo.SendChatMessage` raises a Lua error,
   `SendChatMessage(): Chat message limits exceeded`. **Confirmed** through Blizzard's
   chat box: 600 and 300 letters failed (BugGrabber: "No Lua Taint"), 200 went out.
@@ -147,6 +152,23 @@ Still open:
   (`SimpleEditBoxAPIDocumentation.lua`). **Confirmed**: after that, the box took a
   600-letter paste. Pressing Enter on it hits the error above, so whatever lifts the
   limits must also shorten the text before Blizzard sends it.
+- **One box per chat window, each with its own history.** Every chat window has its own
+  edit box (`ChatFrame1EditBox`, …); whisper windows opened later add more
+  (`FloatingChatFrame.xml`). Lifting the limits has to cover them all. Each box keeps a
+  32-line history (`historyLines="32"`), cleared when its window opens. Alt+Up recalls
+  a line (`ignoreArrows`), and the chat type comes back with it. Blizzard stores a sent
+  line as `/say text`, `/emote text`, … (`AddHistory`). `AddHistoryLine` is a widget
+  method, so filling the history from addon code writes no Blizzard Lua state (from the
+  source). A typed slash command goes into the history after its handler has run
+  (`ParseText`), so a line added from `/run` sits one step behind the `/run` line
+  (seen in check 11). **Confirmed** (check 11.6), with the limits lifted: a 731-byte
+  `/s …` line added with `AddHistoryLine` came back whole on Alt+Up, in Say mode, and
+  an `/e …` line in Emote mode. **Confirmed** (check 12.6): the history keeps lines
+  longer than the box's default 1280 bytes. A 2,306-byte say that Unbound refused and
+  kept came back on Alt+Up, and Unbound counted 9 messages again. **Confirmed** (check
+  12.8): a long whisper that Unbound refused and kept came back whole, as a whisper to
+  the same two-part name. **The history doesn't survive `/reload`**: afterwards only
+  lines typed since came back.
 - **Pre-send hook**: Blizzard's chat box triggers the `EventRegistry` event
   `"ChatFrame.OnEditBoxPreSendText"` (payload: the edit box) inside `SendText`. It
   runs after slash-command parsing and before the text is read
@@ -161,8 +183,31 @@ Still open:
     tainted sends are blocked (instances, lockdown): **verify** with the dungeon checks.
   - It also fires after a slash command has run, with an empty box. Check for text before
     touching it.
+  - `SetText` in the hook runs Blizzard's slash parsing again (`OnTextSet` →
+    `ParseText(0)` → `HandleChatType`). Text that starts with `/2 `, `/p ` or `/w Name `
+    can switch the box's chat type, and `SendText` then sends the rest there. An empty
+    box is safe: `ParseText` stops at once, and `SendText` neither sends nor adds a
+    history line (**confirmed**, check 11: nothing else went out, and Alt+Up showed the
+    line before). So a split post is sent by Unbound in full, and the box is emptied.
+  - **Confirmed** outdoors (check 11): sending from inside the callback works on the
+    Enter key press. Three `C_ChatInfo.SendChatMessage` calls on one Enter sent three
+    says, and after a `/reload` three emotes, all in order. With the box's `languageID`
+    every chunk went out in the language picked in the box (two characters; the default
+    language and a racial one).
+  - **Confirmed** with Unbound 0.3.0 (check 12), outdoors:
+    - Says and emotes of 2, 5 and 8 full 255-byte chunks arrived complete and in order,
+      in the picked language. So did a say typed in a whisper window's box.
+    - A 408-byte say with em dashes, curly quotes and ellipses arrived intact in 2
+      chunks. With three item links Shift-clicked into it, it took 3 chunks. Every
+      link arrived whole and coloured, inside one chunk.
+    - A long say sent during a fight arrived with no error: Unbound's own sends from
+      the hook get through in combat outdoors.
+  - Macros don't fire it. Macro lines go through a separate box built on
+    `ChatFrameEditBoxBaseMixin`, whose `OnPreSendText` is empty
+    (`MacroExecutionManager.lua`). Only typed chat reaches the hook.
   - After the hook, `ChatFrameUtil.SubstituteChatMessageBeforeSend` rewrites group tags
-    (`{group1}` → `{g1}`). In English that only makes the text shorter.
+    (`{group1}` → `{g1}`). In English that only makes the text shorter. Chunks Unbound
+    sends itself skip this step, so Unbound calls it on the whole post before splitting.
 - **Sticky chat types and reopening the box.** After a send, the box keeps its type for
   `SAY`, `PARTY`, `RAID`, `INSTANCE_CHAT`, `GUILD`, `OFFICER`, `WHISPER` and `CHANNEL`
   (`ChatTypeInfoConstants.lua`). `EMOTE` isn't sticky: the box falls back to the last
@@ -194,11 +239,20 @@ Still open:
   "The number of messages that can be sent is limited, please wait to send another
   message." Those messages were dropped, not queued or delayed, and Lua saw no error
   (BugGrabber stayed empty).
-  - That line is `ERR_CHAT_THROTTLED` (**confirmed** on Forever, same text), delivered
-    as `CHAT_MSG_SYSTEM`, one per refused message in the isolated tests. In check 9,
-    arrived and refused added up to the number sent, with refusals at the end of the
-    burst. The system line has no chunk identifier: match own echoes before deciding
-    which chunks to retry, especially if delivery is delayed or other sends overlap.
+  - That line is `ERR_CHAT_THROTTLED`, byte for byte (**confirmed**, check 12.7: equal,
+    88 bytes each). It's delivered as `CHAT_MSG_SYSTEM`, one per refused message in the
+    isolated tests. In check 9, arrived and refused added up to the number sent, with
+    refusals at the end of the burst. The system line has no chunk identifier: match own
+    echoes before deciding which chunks to retry, especially if delivery is delayed or
+    other sends overlap. The order of lines doesn't help. In both runs of check 12.7, a
+    burst's refusal lines appeared in chat before the echo of its one accepted message.
+    In the probe, they appeared between the first and second echoes.
+  - The refusal lines arrive after the sending code has returned (**confirmed**, check
+    12.7). A probe sent 17 says in one `/run` and saw both of its refusals only after
+    the loop had finished. So a watch started after the burst still catches them.
+  - **Confirmed** with Unbound 0.3.0 (check 12.7): 14 says, then a 3-chunk say. Piece 1
+    arrived, and Unbound reported "The server refused 2 of 3 messages". Alt+Up brought
+    back the whole post, and Enter on it sent all three pieces, piece 1 a second time.
   - **Recovery:** check 10 started with 15 successful says after a rest. Another 15 at
     2 s got none through; a further retry about 2 s later also failed. Fresh rested
     trials at a 5 s target (the screenshot shows a rounded 6 s gap) and about 8 s also
@@ -239,6 +293,11 @@ Still open:
   compare them. Check `issecretvalue(x)` before touching a chat payload.
 - `C_ChatInfo.AreOutgoingAddonChatMessagesRestricted()` reports whether addons may send
   outgoing chat messages on this realm.
+- **`ADDON_RESTRICTION_STATE_CHANGED`** (payload: type, state) fires before a restriction
+  becomes active and after it ends. Type `Enum.AddOnRestrictionType.Chat` (5) is "addon
+  chat communications are restricted", probably the lockdown above (**verify**).
+  `C_RestrictedActions.IsAddOnRestrictionActive` always returns `false` while that
+  event is being dispatched, so read the payload (from the generated docs).
 
 ## Tooling
 
@@ -260,9 +319,12 @@ Still open:
     `badAddons` table) and turns off Blizzard's own "Interface action failed" message,
     so later blocks in that session are silent. All `/run` code counts as one addon,
     `*** ForceTaint_Strong ***`. `/reload` before each check that might be blocked.
-  - `taintLog` isn't saved in `Config.wtf`, so set it again after every restart. No
-    `taint.log` appeared in the first round, probably because the restart in check 1.4
-    had already turned it off.
+  - `taintLog` isn't saved in `Config.wtf`, so set it again after every restart. Level
+    1 records only blocked actions and the taint behind them, and the client writes the
+    file periodically and at logout. No `taint.log` appeared in the first round (the
+    restart in check 1.4 had probably turned `taintLog` off), nor in the check 12
+    round, where it was on, nor after its rerun. BugGrabber recorded no blocked action
+    in either, so the missing file most likely means nothing was blocked.
 
 ## Prior art
 

@@ -4,8 +4,8 @@ A World of Warcraft addon that splits a long chat message into chunks and sends
 them one by one. Built for **World of Warcraft: Forever**, mostly for
 personal use.
 
-> Early development. The pure text splitter is implemented, but is not connected to
-> the chat box yet. Long-message sending is not available.
+> Early development. Long says and emotes are split and sent on one Enter, outdoors.
+> Stage 0.3 of the [roadmap](docs/roadmap.md) is complete: its in-game gate passed.
 
 - **Zero external dependencies**: no Ace3, LibStub or other third-party libraries.
 - Currently not distributed via CurseForge / WoWInterface / whatever.
@@ -17,7 +17,9 @@ Unbound/                -- the addon folder, which ships to Interface/AddOns/Unb
 ├── Unbound.toc         -- manifest: load order, SavedVariables, version
 ├── Util/
 │   ├── Defaults.lua    -- SavedVariables defaults helper
-│   └── Splitter.lua    -- pure UTF-8 and markup-aware text splitting
+│   ├── Splitter.lua    -- pure UTF-8 and markup-aware text splitting
+│   └── Post.lua        -- pure decision: leave a post to Blizzard, split it, or keep it
+├── ChatBox.lua         -- chat box glue: long text, sending on Enter, refusal reports
 └── Unbound.lua         -- entry point: events, SavedVariables init, slash commands
 test/                   -- DIY test runner, WoW API stubs, tests, that is not shipped
 docs/                   -- design notes and API reference, that is also not shipped
@@ -30,6 +32,21 @@ Just copy or link the `Unbound/` folder into the Forever client's
 
 ## Usage
 
+Outdoors, type a long say or emote and press Enter once. Unbound splits it into
+messages of up to 255 bytes and sends them all, in order, in the language picked in
+the chat box. Short messages are left to Blizzard.
+
+- One Enter sends at most **8** messages (about 1,950 characters). A longer post isn't
+  sent.
+- Long text in other chat types (party, whispers, yell, channels) isn't split yet, and
+  isn't sent either.
+- Every split or unsent post is kept in the chat box history. Open the chat box and
+  press Alt+Up to get it back. The history doesn't survive `/reload`.
+- If the server refuses some of the messages, Unbound says how many. It doesn't resend.
+  Alt+Up brings back the whole post, including the messages that arrived, so delete
+  those before you send it again.
+- In instances and during chat lockdown, Unbound stays off and the chat box is
+  Blizzard's own.
 - `/unbound` or `/ub`: show the version and the list of commands.
 
 ## Development

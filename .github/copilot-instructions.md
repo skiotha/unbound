@@ -46,7 +46,10 @@ Unbound/                    -- the addon folder (ships to Interface/AddOns/Unbou
 ├── Media/
 │   └── Icon.png            -- AddOns-list icon (TOC IconTexture), 64×64 PNG
 ├── Util/                   -- pure-Lua helpers, no WoW API (unit-tested)
-│   └── Defaults.lua        -- ns.ApplyDefaults: deep-fill missing SV keys
+│   ├── Defaults.lua        -- ns.ApplyDefaults: deep-fill missing SV keys
+│   ├── Splitter.lua        -- ns.SplitText: UTF-8 and markup-aware 255-byte chunks
+│   └── Post.lua            -- ns.PlanPost: pass, send in chunks or keep; ns.HistoryLine
+├── ChatBox.lua             -- chat box glue: lifted limits, pre-send sending, refusals
 └── Unbound.lua             -- entry: events, SavedVariables init, slash commands
 test/                       -- DIY runner, WoW stubs, test_*.lua (never shipped)
 docs/                       -- design notes and API reference (never shipped)

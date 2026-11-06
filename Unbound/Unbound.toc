@@ -3,10 +3,12 @@
 ## IconTexture: Interface\Addons\Unbound\Media\Icon.png
 ## Notes: Splits long chat messages into chunks and sends them one by one.
 ## Author: Ahani
-## Version: 0.2.0
+## Version: 0.3.0
 ## Category: Chat
 ## SavedVariables: UnboundDB
 
 Util\Defaults.lua
 Util\Splitter.lua
+Util\Post.lua
+ChatBox.lua
 Unbound.lua

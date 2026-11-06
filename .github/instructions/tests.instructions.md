@@ -30,6 +30,16 @@ applyTo: "test/**"
 - `WowStub.runSlash("/ub help")`: run a typed slash command through `SlashCmdList`.
 - `WowStub.printed`: lines passed to `print()` since the last `loadAddon()`.
   Runner output uses `io.write`, so `print` is free to be captured.
+- `WowStub.newChatEditBox(fields)`: a fake chat edit box (text, chat type, language,
+  history, byte and letter limits). `WowStub.sendText(box)` presses Enter on it the
+  way Blizzard's `SendText` does: pre-send event, send, history line, empty box.
+- `WowStub.sent`: messages passed to `C_ChatInfo.SendChatMessage`, as
+  `{ text, chatType, languageID, target }`.
+- `WowStub.runTimers()`: run every pending `C_Timer.After` callback, including ones
+  scheduled meanwhile.
+- State to set in a test: `WowStub.inInstance`, `WowStub.lockdown`,
+  `WowStub.activeWindow` (the open chat box) and `WowStub.secretValues`
+  (`[value] = true` makes `issecretvalue(value)` true).
 
 ## File Naming
 
